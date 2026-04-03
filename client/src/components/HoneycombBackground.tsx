@@ -25,10 +25,10 @@ const VARIANT_CONFIG: Record<HoneycombVariant, {
   pulseCount: number;
   hexSize: number;
 }> = {
-  hero:    { lineAlpha: 0.22, glowAlpha: 0.18, pulseCount: 5, hexSize: 38 },
-  section: { lineAlpha: 0.10, glowAlpha: 0.08, pulseCount: 3, hexSize: 42 },
-  page:    { lineAlpha: 0.14, glowAlpha: 0.10, pulseCount: 4, hexSize: 36 },
-  app:     { lineAlpha: 0.06, glowAlpha: 0.04, pulseCount: 2, hexSize: 44 },
+  hero:    { lineAlpha: 0.38, glowAlpha: 0.30, pulseCount: 6, hexSize: 38 },
+  section: { lineAlpha: 0.22, glowAlpha: 0.18, pulseCount: 4, hexSize: 42 },
+  page:    { lineAlpha: 0.30, glowAlpha: 0.22, pulseCount: 5, hexSize: 36 },
+  app:     { lineAlpha: 0.14, glowAlpha: 0.10, pulseCount: 3, hexSize: 44 },
 };
 
 export function HoneycombBackground({ variant = "hero", className }: HoneycombBackgroundProps) {
@@ -158,7 +158,7 @@ export function HoneycombBackground({ variant = "hero", className }: HoneycombBa
           // Main hex outline
           hexPath(cx, cy, size * 0.92);
           ctx!.strokeStyle = `rgba(245, 158, 11, ${alpha})`;
-          ctx!.lineWidth = 0.8;
+          ctx!.lineWidth = 1.1;
           ctx!.stroke();
         }
       }

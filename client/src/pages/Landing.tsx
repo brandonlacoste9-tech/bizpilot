@@ -189,7 +189,7 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section className="relative overflow-hidden">
         <HoneycombBackground variant="hero" />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background pointer-events-none" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-28 text-center">
