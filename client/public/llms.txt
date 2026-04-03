@@ -1,0 +1,38 @@
+# IronClaw — AI Business Assistant
+
+> IronClaw is an AI-powered business assistant SaaS for small business owners. It handles emails, phone calls, text messages, and appointment bookings automatically.
+
+## What IronClaw Does
+
+IronClaw gives small business owners an AI assistant that works 24/7:
+
+- **Email**: Automatically reads, categorizes, and replies to customer emails using the business's Knowledge Base (services, pricing, hours, FAQs).
+- **Phone Calls**: Answers calls with the business name, takes voicemail messages, transcribes them, and notifies the owner. Smart routing can ring the owner's cell first, then the AI catches missed calls.
+- **SMS/Text**: Customers text the business number and get instant AI responses with accurate pricing, hours, and availability.
+- **Appointment Booking**: Public booking page where customers pick a date and time. Bookings show on the owner's calendar and trigger Telegram notifications.
+- **Telegram Control**: Business owners manage everything from Telegram — check stats, view inbox, reply to customers, pause auto-replies, and send voice commands to update their AI.
+- **Knowledge Base**: Owners add their services (with pricing), business hours, FAQs, and policies. The AI uses all of this when responding to customers.
+- **Owner Chat**: A private conversation where the owner can tell the AI to update prices, add services, or change hours using natural language.
+
+## Pricing
+
+- **Free**: 10 messages/month, basic features
+- **Starter**: $29/month — 100 emails/month, Telegram control, daily briefings
+- **Pro**: $79/month — Unlimited emails & SMS, dedicated phone number, booking page, smart call routing, custom AI instructions
+- **Enterprise**: $199/month — Multi-location, API access, custom integrations, white-label
+
+## Technology
+
+Built with Next.js/Express, React, Supabase (PostgreSQL), deployed on Vercel. AI powered by OpenAI GPT-4o-mini. Email via SendGrid. Phone/SMS via Twilio. Telegram Bot API for mobile control. OpenAI Whisper for voice transcription.
+
+## URL
+
+https://ironclaw.ca
+
+## Key Differentiators
+
+- Only AI business assistant that supports Telegram as a control channel
+- Combines email + phone + SMS + booking in one platform at SMB-friendly prices
+- Frictionless free tier — no signup form, start in under 2 minutes
+- Owner can update the AI's knowledge by talking to it (text or voice)
+- Zero-developer setup — no technical skills needed

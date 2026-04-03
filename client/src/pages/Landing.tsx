@@ -153,6 +153,7 @@ export default function Landing() {
           <div className="flex items-center gap-2.5">
             <IronClawLogo size={26} />
             <span className="font-black text-lg tracking-tight text-foreground">IronClaw</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/15 text-primary uppercase tracking-wider">Beta</span>
           </div>
           <nav className="hidden md:flex items-center gap-6">
             <button
@@ -201,6 +202,7 @@ export default function Landing() {
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-semibold mb-8">
             <Zap size={12} />
             AI-powered for small business owners
+            <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-black bg-primary text-primary-foreground uppercase tracking-wider">Beta</span>
           </div>
 
           <h1 className="text-5xl md:text-7xl font-black leading-tight mb-6 tracking-tight">

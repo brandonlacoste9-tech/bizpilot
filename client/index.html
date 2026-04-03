@@ -2,11 +2,141 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5" />
+
+    <!-- Primary SEO -->
+    <title>IronClaw — AI Business Assistant for Small Business Owners</title>
+    <meta name="description" content="IronClaw handles your emails, phone calls, texts, and appointment bookings automatically. Your AI assistant works 24/7 so you can focus on running your business. Start free." />
+    <meta name="keywords" content="AI business assistant, small business AI, auto reply emails, AI phone answering, appointment booking, business automation, AI receptionist, virtual assistant" />
+    <meta name="author" content="IronClaw" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://ironclaw.ca" />
+
+    <!-- Open Graph (Facebook, LinkedIn, Discord) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ironclaw.ca" />
+    <meta property="og:title" content="IronClaw — Your AI. Your Rules. Your Business." />
+    <meta property="og:description" content="AI-powered assistant that handles emails, phone calls, texts, and bookings for small business owners. Start free — no credit card required." />
+    <meta property="og:site_name" content="IronClaw" />
+    <meta property="og:locale" content="en_CA" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="IronClaw — AI Business Assistant" />
+    <meta name="twitter:description" content="Your AI handles emails, calls, texts, and bookings 24/7. Focus on your business, not your inbox." />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath d='M20 4L28 14L24 18L20 10L16 18L12 14Z' fill='%23F59E0B'/%3E%3Cpath d='M12 18L8 32L14 28L16 36L20 26L24 36L26 28L32 32L28 18' fill='%23F59E0B' opacity='0.85'/%3E%3C/svg%3E" />
+    <meta name="theme-color" content="#0A0A0A" />
+
+    <!-- Structured Data: Organization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "IronClaw",
+      "url": "https://ironclaw.ca",
+      "description": "AI-powered business assistant for small business owners. Handles emails, phone calls, texts, and appointment bookings automatically.",
+      "foundingDate": "2026"
+    }
+    </script>
+
+    <!-- Structured Data: SaaS Product -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "IronClaw",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://ironclaw.ca",
+      "description": "AI business assistant that handles emails, phone calls, texts, and appointment bookings for small business owners.",
+      "offers": [
+        {
+          "@type": "Offer",
+          "name": "Starter",
+          "price": "29.00",
+          "priceCurrency": "USD",
+          "priceValidUntil": "2027-12-31",
+          "description": "100 emails/month, Telegram control, daily briefings"
+        },
+        {
+          "@type": "Offer",
+          "name": "Pro",
+          "price": "79.00",
+          "priceCurrency": "USD",
+          "priceValidUntil": "2027-12-31",
+          "description": "Unlimited emails & SMS, dedicated phone number, public booking page, smart call routing"
+        },
+        {
+          "@type": "Offer",
+          "name": "Enterprise",
+          "price": "199.00",
+          "priceCurrency": "USD",
+          "priceValidUntil": "2027-12-31",
+          "description": "Multi-location support, API access, custom integrations, white-label option"
+        }
+      ]
+    }
+    </script>
+
+    <!-- Structured Data: FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How does IronClaw connect to my email?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "IronClaw gives you a unique email forwarding address. Set up forwarding from your email provider (Gmail, Outlook, Yahoo) and your AI starts processing messages automatically. Setup takes under 2 minutes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can customers text my business number?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Your IronClaw phone number handles both calls and texts. When a customer sends a text, the AI responds instantly using your business information, pricing, and hours from your Knowledge Base."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I customize what the AI says?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Absolutely. Use the Knowledge Base to add your services, pricing, hours, FAQs, and custom instructions. You can also talk to your AI directly in the Owner Chat to update anything using natural language — even voice commands via Telegram."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does the phone system work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Pro plan users get a dedicated business phone number. When someone calls, you can choose: AI answers all calls, or ring your cell first and the AI catches anything you miss. Voicemails are transcribed and sent to your Telegram."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is my data secure?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "All data is stored encrypted at rest. We never share your data with third parties, and you can export or delete everything at any time."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I cancel at any time?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Absolutely. No lock-in, no cancellation fees. Cancel your subscription with one click."
+          }
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
