@@ -78,6 +78,8 @@ async function provisionTwilioNumber(businessId: string, businessName: string): 
       friendlyName: `IronClaw - ${businessName}`,
       voiceUrl: "https://ironclaw.ca/api/twilio/voice",
       voiceMethod: "POST",
+      smsUrl: "https://ironclaw.ca/api/twilio/sms",
+      smsMethod: "POST",
     });
 
     console.log(`[twilio] ✓ Provisioned ${purchased.phoneNumber} for business ${businessId}`);
@@ -1312,6 +1314,101 @@ export async function registerRoutes(
       console.error("Twilio voice-fallback error:", err);
       const twiml = new VoiceResponse();
       twiml.say("Sorry, there was an error. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      return res.send(twiml.toString());
+    }
+  });
+
+  // POST /api/twilio/sms
+  // NOTE: No requireAuth — called by Twilio when someone texts the business number
+  app.post("/api/twilio/sms", async (req: Request, res: Response) => {
+    try {
+      const fromNumber = req.body.From || "";
+      const toNumber = req.body.To || "";
+      const messageBody = (req.body.Body || "").trim();
+
+      if (!messageBody) {
+        const twiml = new (twilio.twiml.MessagingResponse)();
+        res.set("Content-Type", "text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Look up business by the Twilio number that received the text
+      const business = await storage.getBusinessByTwilioNumber(toNumber);
+      if (!business) {
+        const twiml = new (twilio.twiml.MessagingResponse)();
+        twiml.message("Sorry, this number is not configured. Please try again later.");
+        res.set("Content-Type", "text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Check plan limits
+      const subscription = await storage.getSubscriptionByUserId(business.userId);
+      const planCheck = await checkPlanLimits(business.id, subscription?.plan || "free");
+      if (!planCheck.allowed) {
+        const twiml = new (twilio.twiml.MessagingResponse)();
+        twiml.message(`Thank you for texting ${business.name}. We're experiencing high volume — please call us or try again later.`);
+        res.set("Content-Type", "text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Find existing conversation from this phone number, or create a new one
+      const conversations = await storage.listConversations(business.id);
+      let conversation = conversations.find(
+        (c) => c.source === "sms" && c.contactPhone === fromNumber && c.status !== "resolved"
+      );
+
+      if (!conversation) {
+        conversation = await storage.createConversation(business.id, {
+          source: "sms",
+          contactPhone: fromNumber,
+          contactName: fromNumber,
+          subject: `Text from ${fromNumber}`,
+          status: "new",
+        });
+      }
+
+      // Save the customer's message
+      await storage.createMessage(conversation.id, "customer", messageBody);
+
+      // Run through AI
+      const aiResult = await processWithAI(business, conversation, messageBody);
+
+      // Save AI reply
+      await storage.createMessage(conversation.id, "assistant", aiResult.reply);
+
+      // Update conversation
+      await storage.updateConversation(conversation.id, business.id, {
+        status: aiResult.shouldEscalate ? "escalated" : "in_progress",
+        category: aiResult.category as any,
+        summary: aiResult.reply.substring(0, 200),
+        aiResponse: aiResult.reply,
+      });
+
+      // Log activity
+      await storage.createActivityLog(business.id, {
+        type: "reply",
+        title: "SMS received & replied",
+        description: `From ${fromNumber}: ${messageBody.substring(0, 80)}`,
+      });
+
+      // Notify owner via Telegram
+      if (business.telegramChatId) {
+        await sendTelegramMessage(
+          business.telegramChatId,
+          `📱 *New text message*\n\nFrom: ${fromNumber}\nMessage: ${messageBody.substring(0, 150)}\n\n🤖 AI replied automatically.`
+        );
+      }
+
+      // Reply via SMS
+      const twiml = new (twilio.twiml.MessagingResponse)();
+      twiml.message(aiResult.reply);
+      res.set("Content-Type", "text/xml");
+      return res.send(twiml.toString());
+    } catch (err: any) {
+      console.error("Twilio SMS error:", err);
+      const twiml = new (twilio.twiml.MessagingResponse)();
+      twiml.message("Sorry, we couldn't process your message. Please try calling us instead.");
       res.set("Content-Type", "text/xml");
       return res.send(twiml.toString());
     }
