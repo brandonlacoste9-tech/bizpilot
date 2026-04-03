@@ -14,6 +14,7 @@ import {
   CheckCircle,
   TrendingUp,
   Zap,
+  Phone,
 } from "lucide-react";
 import type { Stats, ActivityLog } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
@@ -127,7 +128,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
           <StatCard
             label="Total"
             value={stats?.totalConversations ?? 0}
@@ -160,6 +161,13 @@ export default function Dashboard() {
             value={stats?.upcomingAppointments ?? 0}
             icon={<CalendarDays size={16} />}
             accent="bg-amber-500/10"
+            loading={statsLoading}
+          />
+          <StatCard
+            label="Phone Calls"
+            value={stats?.phoneCalls ?? 0}
+            icon={<Phone size={16} />}
+            accent="bg-purple-500/10"
             loading={statsLoading}
           />
         </div>

@@ -71,7 +71,10 @@ function ConversationItem({
       )}
     >
       <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="font-medium text-sm text-foreground truncate">
+        <div className="font-medium text-sm text-foreground truncate flex items-center gap-1.5">
+          <span className="text-base leading-none" aria-label={conv.source}>
+            {conv.source === "email" ? "📧" : conv.source === "phone" ? "📞" : "💬"}
+          </span>
           {conv.contactName || conv.contactEmail || "Unknown"}
         </div>
         <span className={cn("text-xs px-2 py-0.5 rounded-full border flex-shrink-0", STATUS_COLORS[conv.status])}>

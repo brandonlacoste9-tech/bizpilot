@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -21,6 +21,10 @@ import {
   Crown,
   ArrowRight,
   Save,
+  Mail,
+  Phone,
+  Copy,
+  Check,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────
@@ -144,6 +148,8 @@ export default function Settings() {
   const business = authData?.business;
   const subscription = authData?.subscription;
 
+  const [copied, setCopied] = useState(false);
+
   const form = useForm<UpdateBusiness>({
     resolver: zodResolver(updateBusinessSchema),
     defaultValues: {
@@ -155,6 +161,9 @@ export default function Settings() {
       assistantName: "IronClaw",
       aiInstructions: "",
       telegramChatId: "",
+      autoReplyEnabled: true,
+      emailNotifications: true,
+      smsNotifications: true,
     },
   });
 
@@ -170,9 +179,24 @@ export default function Settings() {
         assistantName: business.assistantName || "IronClaw",
         aiInstructions: business.aiInstructions || "",
         telegramChatId: business.telegramChatId || "",
+        autoReplyEnabled: business.autoReplyEnabled !== false,
+        emailNotifications: business.emailNotifications !== false,
+        smsNotifications: business.smsNotifications !== false,
       });
     }
   }, [business, form]);
+
+  const forwardingAddress = business?.id
+    ? `inbox-${business.id}@parse.ironclaw.ca`
+    : "";
+
+  const handleCopyEmail = () => {
+    if (forwardingAddress) {
+      navigator.clipboard.writeText(forwardingAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const updateMutation = useMutation({
     mutationFn: (data: UpdateBusiness) => apiRequest("PATCH", "/api/business", data),
@@ -333,6 +357,129 @@ export default function Settings() {
                 Message <span className="text-primary font-mono">@Bee_Leroux_bot</span> on Telegram and type{" "}
                 <span className="text-primary font-mono">/start</span> to get your Chat ID.
               </p>
+            </div>
+          </Section>
+
+          {/* Email Forwarding */}
+          <Section
+            icon={<Mail size={18} />}
+            title="Email Forwarding"
+            description="Forward inbound emails to your AI assistant"
+          >
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Configure your email provider to forward messages to this address. Your AI will automatically process and reply.
+              </p>
+              {forwardingAddress ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 p-2.5 rounded-lg bg-background border border-border font-mono text-xs text-foreground truncate">
+                    {forwardingAddress}
+                  </div>
+                  <Button
+                    type="button"
+                    data-testid="button-copy-email"
+                    variant="outline"
+                    size="sm"
+                    className="flex-shrink-0 border-border"
+                    onClick={handleCopyEmail}
+                  >
+                    {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-background border border-border text-xs text-muted-foreground">
+                  Complete onboarding to get your forwarding address.
+                </div>
+              )}
+            </div>
+          </Section>
+
+          {/* Phone Number */}
+          <Section
+            icon={<Phone size={18} />}
+            title="Phone Number"
+            description="Twilio phone number for inbound calls"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border">
+                <div className={`w-2 h-2 rounded-full ${business?.twilioPhoneNumber ? "bg-green-400" : "bg-muted-foreground"}`} />
+                <span className="text-sm text-muted-foreground font-mono">
+                  {business?.twilioPhoneNumber || "Not configured"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Phone call handling requires a Pro or Enterprise plan. Configure your Twilio number in the Vercel environment variables.
+              </p>
+            </div>
+          </Section>
+
+          {/* AI Settings */}
+          <Section
+            icon={<Zap size={18} />}
+            title="AI Settings"
+            description="Control auto-reply and notification preferences"
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Auto-reply</div>
+                  <div className="text-xs text-muted-foreground">Automatically send AI replies to new messages</div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="toggle-auto-reply"
+                  onClick={() => form.setValue("autoReplyEnabled", !form.watch("autoReplyEnabled"))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    form.watch("autoReplyEnabled") ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                      form.watch("autoReplyEnabled") ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Email notifications</div>
+                  <div className="text-xs text-muted-foreground">Receive email alerts for new messages</div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="toggle-email-notifications"
+                  onClick={() => form.setValue("emailNotifications", !form.watch("emailNotifications"))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    form.watch("emailNotifications") ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                      form.watch("emailNotifications") ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-foreground">SMS notifications</div>
+                  <div className="text-xs text-muted-foreground">Receive SMS alerts for new messages</div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="toggle-sms-notifications"
+                  onClick={() => form.setValue("smsNotifications", !form.watch("smsNotifications"))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    form.watch("smsNotifications") ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                      form.watch("smsNotifications") ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </Section>
 

@@ -40,9 +40,29 @@ export interface Business {
   aiInstructions?: string | null;
   assistantName: string;
   telegramChatId?: string | null;
+  twilioPhoneNumber?: string | null;
+  forwardingEmail?: string | null;
+  emailNotifications?: boolean | null;
+  smsNotifications?: boolean | null;
+  autoReplyEnabled?: boolean | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PhoneCall {
+  id: string;
+  businessId: string;
+  callSid: string;
+  fromNumber: string;
+  toNumber: string;
+  status: string;
+  duration: number;
+  recordingUrl?: string | null;
+  transcription?: string | null;
+  aiSummary?: string | null;
+  callerName?: string | null;
+  createdAt: string;
 }
 
 export interface Conversation {
@@ -108,6 +128,7 @@ export interface Stats {
   autoReplied: number;
   escalated: number;
   upcomingAppointments: number;
+  phoneCalls?: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -138,9 +159,26 @@ export const insertBusinessSchema = z.object({
   aiInstructions: z.string().optional(),
   assistantName: z.string().default("IronClaw"),
   telegramChatId: z.string().optional(),
+  twilioPhoneNumber: z.string().optional(),
+  forwardingEmail: z.string().optional(),
+  emailNotifications: z.boolean().optional(),
+  smsNotifications: z.boolean().optional(),
+  autoReplyEnabled: z.boolean().optional(),
 });
 
 export const updateBusinessSchema = insertBusinessSchema.partial();
+
+export const insertPhoneCallSchema = z.object({
+  callSid: z.string().min(1),
+  fromNumber: z.string().min(1),
+  toNumber: z.string().min(1),
+  status: z.string().default("completed"),
+  duration: z.number().default(0),
+  recordingUrl: z.string().optional(),
+  transcription: z.string().optional(),
+  aiSummary: z.string().optional(),
+  callerName: z.string().optional(),
+});
 
 export const insertConversationSchema = z.object({
   source: z.string().min(1),
@@ -201,6 +239,7 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
 export type UpdateBusiness = z.infer<typeof updateBusinessSchema>;
+export type InsertPhoneCall = z.infer<typeof insertPhoneCallSchema>;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type UpdateConversation = z.infer<typeof updateConversationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;

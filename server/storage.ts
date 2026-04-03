@@ -3,6 +3,7 @@ import type {
   User,
   Subscription,
   Business,
+  PhoneCall,
   Conversation,
   Message,
   CalendarEvent,
@@ -11,6 +12,7 @@ import type {
   Stats,
   InsertBusiness,
   UpdateBusiness,
+  InsertPhoneCall,
   InsertConversation,
   UpdateConversation,
   InsertCalendarEvent,
@@ -77,9 +79,31 @@ function mapBusiness(row: any): Business {
     aiInstructions: row.ai_instructions,
     assistantName: row.assistant_name ?? "IronClaw",
     telegramChatId: row.telegram_chat_id,
+    twilioPhoneNumber: row.twilio_phone_number,
+    forwardingEmail: row.forwarding_email,
+    emailNotifications: row.email_notifications,
+    smsNotifications: row.sms_notifications,
+    autoReplyEnabled: row.auto_reply_enabled,
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapPhoneCall(row: any): PhoneCall {
+  return {
+    id: row.id,
+    businessId: row.business_id,
+    callSid: row.call_sid,
+    fromNumber: row.from_number,
+    toNumber: row.to_number,
+    status: row.status,
+    duration: row.duration ?? 0,
+    recordingUrl: row.recording_url,
+    transcription: row.transcription,
+    aiSummary: row.ai_summary,
+    callerName: row.caller_name,
+    createdAt: row.created_at,
   };
 }
 
@@ -154,21 +178,32 @@ export interface IStorage {
   createSubscription(userId: string, plan?: string): Promise<Subscription>;
   getSubscriptionByUserId(userId: string): Promise<Subscription | null>;
   updateSubscription(id: string, updates: Partial<Subscription>): Promise<Subscription | null>;
+  updateSubscriptionByUserId(userId: string, updates: Partial<Subscription>): Promise<Subscription | null>;
 
   // Businesses
   createBusiness(userId: string, data: InsertBusiness): Promise<Business>;
   getBusinessByUserId(userId: string): Promise<Business | null>;
   updateBusiness(id: string, data: UpdateBusiness): Promise<Business | null>;
+  getBusinessByTwilioNumber(phoneNumber: string): Promise<Business | null>;
+  getBusinessByForwardingEmail(email: string): Promise<Business | null>;
 
   // Conversations
   listConversations(businessId: string, filters?: { status?: string; category?: string }): Promise<Conversation[]>;
   getConversation(id: string, businessId: string): Promise<Conversation | null>;
   createConversation(businessId: string, data: InsertConversation): Promise<Conversation>;
   updateConversation(id: string, businessId: string, data: UpdateConversation): Promise<Conversation | null>;
+  getConversationCountThisMonth(businessId: string): Promise<number>;
 
   // Messages
   listMessagesByConversation(conversationId: string): Promise<Message[]>;
   createMessage(conversationId: string, role: string, content: string): Promise<Message>;
+
+  // Phone Calls
+  createPhoneCall(businessId: string, data: InsertPhoneCall): Promise<PhoneCall>;
+  getPhoneCallByCallSid(callSid: string): Promise<PhoneCall | null>;
+  updatePhoneCall(id: string, updates: Partial<PhoneCall>): Promise<PhoneCall | null>;
+  listPhoneCallsByBusiness(businessId: string, limit?: number): Promise<PhoneCall[]>;
+  getPhoneCallStats(businessId: string): Promise<{ total: number }>;
 
   // Calendar Events
   listCalendarEvents(businessId: string, from?: string, to?: string): Promise<CalendarEvent[]>;
@@ -267,6 +302,12 @@ export class DatabaseStorage implements IStorage {
     return mapSubscription(data);
   }
 
+  async updateSubscriptionByUserId(userId: string, updates: Partial<Subscription>): Promise<Subscription | null> {
+    const existing = await this.getSubscriptionByUserId(userId);
+    if (!existing) return null;
+    return this.updateSubscription(existing.id, updates);
+  }
+
   // ─── Businesses ───────────────────────────────────────────
 
   async createBusiness(userId: string, data: InsertBusiness): Promise<Business> {
@@ -320,6 +361,11 @@ export class DatabaseStorage implements IStorage {
     if (data.aiInstructions !== undefined) updates.ai_instructions = data.aiInstructions;
     if (data.assistantName !== undefined) updates.assistant_name = data.assistantName;
     if (data.telegramChatId !== undefined) updates.telegram_chat_id = data.telegramChatId;
+    if (data.twilioPhoneNumber !== undefined) updates.twilio_phone_number = data.twilioPhoneNumber;
+    if (data.forwardingEmail !== undefined) updates.forwarding_email = data.forwardingEmail;
+    if (data.emailNotifications !== undefined) updates.email_notifications = data.emailNotifications;
+    if (data.smsNotifications !== undefined) updates.sms_notifications = data.smsNotifications;
+    if (data.autoReplyEnabled !== undefined) updates.auto_reply_enabled = data.autoReplyEnabled;
     updates.updated_at = new Date().toISOString();
 
     const { data: row, error } = await supabase
@@ -330,6 +376,26 @@ export class DatabaseStorage implements IStorage {
       .single();
     if (error) return null;
     return mapBusiness(row);
+  }
+
+  async getBusinessByTwilioNumber(phoneNumber: string): Promise<Business | null> {
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("*")
+      .eq("twilio_phone_number", phoneNumber)
+      .single();
+    if (error) return null;
+    return mapBusiness(data);
+  }
+
+  async getBusinessByForwardingEmail(email: string): Promise<Business | null> {
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("*")
+      .eq("forwarding_email", email)
+      .single();
+    if (error) return null;
+    return mapBusiness(data);
   }
 
   // ─── Conversations ────────────────────────────────────────
@@ -383,6 +449,18 @@ export class DatabaseStorage implements IStorage {
       .single();
     if (error) throw new Error(`createConversation: ${error.message}`);
     return mapConversation(row);
+  }
+
+  async getConversationCountThisMonth(businessId: string): Promise<number> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("business_id", businessId)
+      .gte("created_at", startOfMonth);
+    if (error) return 0;
+    return (data || []).length;
   }
 
   async updateConversation(
@@ -498,6 +576,78 @@ export class DatabaseStorage implements IStorage {
       .eq("business_id", businessId);
   }
 
+  // ─── Phone Calls ──────────────────────────────────────────
+
+  async createPhoneCall(businessId: string, data: InsertPhoneCall): Promise<PhoneCall> {
+    const { data: row, error } = await supabase
+      .from("phone_calls")
+      .insert({
+        business_id: businessId,
+        call_sid: data.callSid,
+        from_number: data.fromNumber,
+        to_number: data.toNumber,
+        status: data.status ?? "completed",
+        duration: data.duration ?? 0,
+        recording_url: data.recordingUrl,
+        transcription: data.transcription,
+        ai_summary: data.aiSummary,
+        caller_name: data.callerName,
+      })
+      .select()
+      .single();
+    if (error) throw new Error(`createPhoneCall: ${error.message}`);
+    return mapPhoneCall(row);
+  }
+
+  async getPhoneCallByCallSid(callSid: string): Promise<PhoneCall | null> {
+    const { data, error } = await supabase
+      .from("phone_calls")
+      .select("*")
+      .eq("call_sid", callSid)
+      .single();
+    if (error) return null;
+    return mapPhoneCall(data);
+  }
+
+  async updatePhoneCall(id: string, updates: Partial<PhoneCall>): Promise<PhoneCall | null> {
+    const snakeUpdates: any = {};
+    if (updates.status !== undefined) snakeUpdates.status = updates.status;
+    if (updates.duration !== undefined) snakeUpdates.duration = updates.duration;
+    if (updates.recordingUrl !== undefined) snakeUpdates.recording_url = updates.recordingUrl;
+    if (updates.transcription !== undefined) snakeUpdates.transcription = updates.transcription;
+    if (updates.aiSummary !== undefined) snakeUpdates.ai_summary = updates.aiSummary;
+    if (updates.callerName !== undefined) snakeUpdates.caller_name = updates.callerName;
+
+    const { data, error } = await supabase
+      .from("phone_calls")
+      .update(snakeUpdates)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) return null;
+    return mapPhoneCall(data);
+  }
+
+  async listPhoneCallsByBusiness(businessId: string, limit = 50): Promise<PhoneCall[]> {
+    const { data, error } = await supabase
+      .from("phone_calls")
+      .select("*")
+      .eq("business_id", businessId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) return [];
+    return (data || []).map(mapPhoneCall);
+  }
+
+  async getPhoneCallStats(businessId: string): Promise<{ total: number }> {
+    const { data, error } = await supabase
+      .from("phone_calls")
+      .select("id")
+      .eq("business_id", businessId);
+    if (error) return { total: 0 };
+    return { total: (data || []).length };
+  }
+
   // ─── Activity Log ─────────────────────────────────────────
 
   async listActivityLog(businessId: string, limit = 50): Promise<ActivityLog[]> {
@@ -550,7 +700,7 @@ export class DatabaseStorage implements IStorage {
   async getStats(businessId: string): Promise<Stats> {
     const now = new Date().toISOString();
 
-    const [convResult, upcomingResult] = await Promise.all([
+    const [convResult, upcomingResult, phoneCallResult] = await Promise.all([
       supabase
         .from("conversations")
         .select("status")
@@ -560,6 +710,10 @@ export class DatabaseStorage implements IStorage {
         .select("id")
         .eq("business_id", businessId)
         .gte("start_time", now),
+      supabase
+        .from("phone_calls")
+        .select("id")
+        .eq("business_id", businessId),
     ]);
 
     const conversations = convResult.data || [];
@@ -576,6 +730,7 @@ export class DatabaseStorage implements IStorage {
 
     const autoReplied = (aiReplied.data || []).length;
     const upcomingAppointments = (upcomingResult.data || []).length;
+    const phoneCalls = (phoneCallResult.data || []).length;
 
     return {
       totalConversations,
@@ -583,6 +738,7 @@ export class DatabaseStorage implements IStorage {
       autoReplied,
       escalated,
       upcomingAppointments,
+      phoneCalls,
     };
   }
 }
