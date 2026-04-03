@@ -4,6 +4,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Mail,
   Phone,
@@ -16,6 +17,10 @@ import {
   ArrowRight,
   Zap,
   Shield,
+  Send,
+  Bot,
+  Sparkles,
+  Inbox,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -151,6 +156,130 @@ function CopyBlock({ value, label }: { value: string; label?: string }) {
           {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Test message section
+// ─────────────────────────────────────────────────────────────
+
+const SAMPLE_MESSAGES = [
+  "Hi, I'd like to book an appointment for next Friday",
+  "What are your business hours?",
+  "How much does your service cost?",
+  "I have a complaint about my recent visit",
+];
+
+function TestMessageSection({ businessName }: { businessName?: string }) {
+  const [message, setMessage] = useState("");
+  const [aiReply, setAiReply] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const testMutation = useMutation({
+    mutationFn: async (msg: string) => {
+      const res = await apiRequest("POST", "/api/test-message", { message: msg, senderName: "Test Customer" });
+      return await res.json();
+    },
+    onSuccess: async (data: any) => {
+      setAiReply(data.aiReply || "AI processed your message.");
+      await queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/activity"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Test failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSend = () => {
+    if (!message.trim()) return;
+    setAiReply(null);
+    testMutation.mutate(message.trim());
+  };
+
+  return (
+    <div className="p-5 space-y-4">
+      {/* Quick prompts */}
+      <div className="flex flex-wrap gap-2">
+        {SAMPLE_MESSAGES.map((msg) => (
+          <button
+            key={msg}
+            type="button"
+            onClick={() => { setMessage(msg); setAiReply(null); }}
+            className="px-3 py-1.5 rounded-full text-xs bg-secondary/80 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors border border-border"
+          >
+            {msg}
+          </button>
+        ))}
+      </div>
+
+      {/* Message input */}
+      <div className="space-y-2">
+        <Textarea
+          data-testid="input-test-message"
+          placeholder={`Type a message as if you were a customer of ${businessName || "your business"}...`}
+          value={message}
+          onChange={(e: any) => setMessage(e.target.value)}
+          className="bg-background border-border resize-none text-sm"
+          rows={2}
+          onKeyDown={(e: any) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+        />
+        <Button
+          data-testid="button-send-test"
+          onClick={handleSend}
+          disabled={!message.trim() || testMutation.isPending}
+          className="bg-primary text-primary-foreground font-semibold amber-glow hover:bg-primary/90"
+        >
+          {testMutation.isPending ? (
+            <>
+              <div className="w-4 h-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin mr-2" />
+              AI is thinking...
+            </>
+          ) : (
+            <>
+              <Send size={14} className="mr-2" />
+              Send Test Message
+            </>
+          )}
+        </Button>
+      </div>
+
+      {/* AI Reply */}
+      {aiReply && (
+        <div className="space-y-3">
+          {/* Customer message */}
+          <div className="flex gap-3">
+            <div className="w-7 h-7 rounded-full bg-blue-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Mail size={13} className="text-blue-400" />
+            </div>
+            <div className="flex-1 p-3 rounded-lg bg-blue-500/5 border border-blue-500/15">
+              <div className="text-xs font-medium text-blue-400 mb-1">Test Customer</div>
+              <div className="text-sm text-foreground">{message}</div>
+            </div>
+          </div>
+          {/* AI reply */}
+          <div className="flex gap-3">
+            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Bot size={13} className="text-primary" />
+            </div>
+            <div className="flex-1 p-3 rounded-lg bg-primary/5 border border-primary/15">
+              <div className="text-xs font-medium text-primary mb-1">Your AI Assistant</div>
+              <div className="text-sm text-foreground whitespace-pre-wrap">{aiReply}</div>
+            </div>
+          </div>
+          {/* CTA to Inbox */}
+          <a href="/#/inbox" className="inline-flex items-center gap-2 text-xs text-primary hover:underline font-medium">
+            <Inbox size={13} />
+            View this conversation in your Inbox
+            <ArrowRight size={12} />
+          </a>
+        </div>
+      )}
     </div>
   );
 }
@@ -455,6 +584,24 @@ export default function Setup() {
               )}
             </div>
           </ChannelCard>
+        </div>
+
+        {/* ── Try Your AI ── */}
+        <div className="mt-8 bg-card border border-primary/20 rounded-xl overflow-hidden">
+          <div className="p-5 border-b border-border">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
+                <Sparkles size={20} className="text-primary" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-foreground">Try Your AI</div>
+                <div className="text-xs text-muted-foreground">
+                  Send a test message as if you were a customer. See how your AI responds.
+                </div>
+              </div>
+            </div>
+          </div>
+          <TestMessageSection businessName={business?.name} />
         </div>
 
         {/* Tip */}

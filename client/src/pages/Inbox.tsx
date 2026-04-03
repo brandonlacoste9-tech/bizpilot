@@ -25,7 +25,11 @@ import {
   ArrowLeft,
   Bot,
   User,
+  Plug,
+  ArrowRight,
+  Sparkles,
 } from "lucide-react";
+import { Link } from "wouter";
 import type { Conversation, Message } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -370,8 +374,18 @@ export default function Inbox() {
                 </div>
               ) : !filtered?.length ? (
                 <div className="py-10 text-center px-4">
-                  <InboxIcon size={28} className="text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No conversations</p>
+                  <InboxIcon size={28} className="text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground mb-1">No conversations yet</p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Send a test message from the Setup page to see your AI in action.
+                  </p>
+                  <Link href="/setup">
+                    <button className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium">
+                      <Sparkles size={12} />
+                      Try your AI
+                      <ArrowRight size={11} />
+                    </button>
+                  </Link>
                 </div>
               ) : (
                 filtered.map((conv) => (
@@ -392,9 +406,29 @@ export default function Inbox() {
               <ConversationDetail conversationId={selectedId} />
             ) : (
               <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <MessageSquare size={40} className="text-muted-foreground/20 mx-auto mb-3" />
-                  <p className="text-muted-foreground text-sm">Select a conversation to view</p>
+                <div className="text-center max-w-xs">
+                  {!conversations?.length ? (
+                    <>
+                      <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                        <Sparkles size={24} className="text-primary" />
+                      </div>
+                      <p className="text-base font-bold text-foreground mb-2">Your inbox is empty</p>
+                      <p className="text-sm text-muted-foreground mb-5">
+                        Try sending a test message to see how your AI assistant responds to customer inquiries.
+                      </p>
+                      <Link href="/setup">
+                        <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold amber-glow hover:bg-primary/90 transition-colors">
+                          <Sparkles size={14} />
+                          Send a Test Message
+                        </button>
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <MessageSquare size={40} className="text-muted-foreground/20 mx-auto mb-3" />
+                      <p className="text-muted-foreground text-sm">Select a conversation to view</p>
+                    </>
+                  )}
                 </div>
               </div>
             )}

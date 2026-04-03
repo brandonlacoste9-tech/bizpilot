@@ -1252,6 +1252,84 @@ export async function registerRoutes(
     }
   });
 
+  // ── Test Message (Demo) ─────────────────────────────────────
+
+  // POST /api/test-message
+  // Lets a user send a fake customer message to see how their AI responds.
+  // Creates a real conversation in their Inbox so they can see it.
+  app.post("/api/test-message", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) {
+        return res.status(400).json({ message: "No business profile found. Complete onboarding first." });
+      }
+
+      const { message, senderName } = req.body;
+      if (!message || typeof message !== "string" || !message.trim()) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      const contactName = senderName || "Test Customer";
+      const contactEmail = "test@example.com";
+
+      // 1. Create a conversation
+      const conversation = await storage.createConversation(business.id, {
+        source: "email",
+        contactName,
+        contactEmail,
+        subject: "Test Message",
+        status: "new",
+      });
+
+      // 2. Save the customer message
+      await storage.createMessage(conversation.id, "customer", message.trim());
+
+      // 3. Process with AI
+      const aiResult = await processWithAI(business, conversation, message.trim());
+
+      // 4. Save the AI reply
+      await storage.createMessage(conversation.id, "assistant", aiResult.reply);
+
+      // 5. Update conversation status
+      await storage.updateConversation(conversation.id, business.id, {
+        status: aiResult.shouldEscalate ? "escalated" : "resolved",
+        category: aiResult.category as any,
+        summary: aiResult.reply.substring(0, 200),
+        aiResponse: aiResult.reply,
+      });
+
+      // 6. Log activity
+      await storage.createActivityLog(business.id, {
+        type: "reply",
+        title: "Test message processed",
+        description: `AI responded to test from ${contactName}`,
+      });
+
+      // 7. Notify via Telegram if connected
+      if (business.telegramChatId) {
+        await sendTelegramMessage(
+          business.telegramChatId,
+          `📩 *Test message received*\n\nFrom: ${contactName}\nMessage: ${message.trim().substring(0, 100)}...\n\n🤖 AI replied automatically. Check your Inbox to see it.`
+        );
+      }
+
+      return res.json({
+        conversation: {
+          id: conversation.id,
+          subject: conversation.subject,
+          contactName,
+          status: aiResult.shouldEscalate ? "escalated" : "resolved",
+        },
+        aiReply: aiResult.reply,
+        category: aiResult.category,
+        shouldEscalate: aiResult.shouldEscalate,
+      });
+    } catch (err: any) {
+      console.error("Test message error:", err);
+      return res.status(500).json({ message: err.message || "Test message failed" });
+    }
+  });
+
   return httpServer;
 }
 
