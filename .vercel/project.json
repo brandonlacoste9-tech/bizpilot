@@ -1,1 +1,16 @@
-{"projectId":"prj_jvYQleEXcCQch47gD5mQNvSU5YQN","orgId":"team_ydv2BxQdKoYlURBiTGxTtgyX","projectName":"bizpilot"}
+{
+  "projectId": "prj_jvYQleEXcCQch47gD5mQNvSU5YQN",
+  "orgId": "team_ydv2BxQdKoYlURBiTGxTtgyX",
+  "projectName": "bizpilot",
+  "settings": {
+    "createdAt": 1775227378879,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
