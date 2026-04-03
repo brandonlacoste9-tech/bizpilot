@@ -102,12 +102,19 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-sm text-muted-foreground mt-6">
-          Don't have an account?{" "}
-          <Link href="/signup">
-            <span className="text-primary hover:underline cursor-pointer font-medium">Create one</span>
-          </Link>
-        </p>
+        <div className="text-center mt-6 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Don't have an account?{" "}
+            <Link href="/onboarding">
+              <span className="text-primary hover:underline cursor-pointer font-medium">Get started free</span>
+            </Link>
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <Link href="/forgot-password">
+              <span className="text-muted-foreground hover:text-foreground cursor-pointer">Forgot your password?</span>
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

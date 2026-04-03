@@ -429,6 +429,85 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/auth/forgot-password
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if email exists
+        return res.json({ message: "If that email exists, a reset link has been sent." });
+      }
+
+      // Generate token
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      const { supabase: supa } = await import("./storage.js");
+      await supa.from("password_reset_tokens").insert({
+        user_id: user.id,
+        token,
+        expires_at: expiresAt.toISOString(),
+      });
+
+      // Send reset email via SendGrid
+      const resetUrl = `https://ironclaw.ca/#/reset-password?token=${token}`;
+      await sendEmail(
+        email,
+        "IronClaw",
+        "noreply@ironclaw.ca",
+        "Reset your IronClaw password",
+        `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px">
+          <h2 style="color:#F59E0B">Reset your password</h2>
+          <p>Click the button below to set a new password. This link expires in 1 hour.</p>
+          <a href="${resetUrl}" style="display:inline-block;background:#F59E0B;color:#000;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">Reset Password</a>
+          <p style="color:#666;font-size:12px">If you didn't request this, you can ignore this email.</p>
+        </div>`
+      );
+
+      return res.json({ message: "If that email exists, a reset link has been sent." });
+    } catch (err: any) {
+      console.error("Forgot password error:", err);
+      return res.json({ message: "If that email exists, a reset link has been sent." });
+    }
+  });
+
+  // POST /api/auth/reset-password
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password || password.length < 8) {
+        return res.status(400).json({ message: "Valid token and password (min 8 chars) required" });
+      }
+
+      const { supabase: supa } = await import("./storage.js");
+      const { data: resetToken } = await supa
+        .from("password_reset_tokens")
+        .select("*")
+        .eq("token", token)
+        .eq("used", false)
+        .single();
+
+      if (!resetToken || new Date(resetToken.expires_at) < new Date()) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+
+      // Update password
+      const passwordHash = await bcrypt.hash(password, 12);
+      await supa.from("users").update({ password_hash: passwordHash }).eq("id", resetToken.user_id);
+
+      // Mark token as used
+      await supa.from("password_reset_tokens").update({ used: true }).eq("id", resetToken.id);
+
+      return res.json({ message: "Password reset successfully. You can now sign in." });
+    } catch (err: any) {
+      console.error("Reset password error:", err);
+      return res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
   // POST /api/auth/login
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
@@ -1831,6 +1910,115 @@ Only include changed fields. Keep your reply short and conversational (this is T
     }
   });
 
+  // ── Owner Chat History ───────────────────────────────────
+
+  // GET /api/owner-chat/history
+  app.get("/api/owner-chat/history", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.json({ messages: [] });
+
+      const { supabase: supa } = await import("./storage.js");
+      const { data } = await supa
+        .from("owner_chat_messages")
+        .select("*")
+        .eq("business_id", business.id)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      return res.json({
+        messages: (data || []).map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          updates: m.updates_applied,
+          timestamp: m.created_at,
+        })),
+      });
+    } catch {
+      return res.json({ messages: [] });
+    }
+  });
+
+  // ── Analytics ───────────────────────────────────────────
+
+  // GET /api/analytics
+  app.get("/api/analytics", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.json({ dailyVolume: [], channelBreakdown: {}, totalThisMonth: 0, totalLastMonth: 0 });
+
+      const { supabase: supa } = await import("./storage.js");
+
+      // Last 30 days of conversations grouped by date
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: convos } = await supa
+        .from("conversations")
+        .select("created_at, source, status")
+        .eq("business_id", business.id)
+        .gte("created_at", thirtyDaysAgo.toISOString());
+
+      // Daily volume
+      const dailyMap: Record<string, number> = {};
+      const channelMap: Record<string, number> = { email: 0, sms: 0, phone: 0, other: 0 };
+      let resolvedCount = 0;
+      let escalatedCount = 0;
+
+      (convos || []).forEach((c: any) => {
+        const day = c.created_at.split("T")[0];
+        dailyMap[day] = (dailyMap[day] || 0) + 1;
+        const src = c.source === "email" ? "email" : c.source === "sms" ? "sms" : c.source === "phone" ? "phone" : "other";
+        channelMap[src] = (channelMap[src] || 0) + 1;
+        if (c.status === "resolved" || c.status === "in_progress") resolvedCount++;
+        if (c.status === "escalated") escalatedCount++;
+      });
+
+      // Fill in missing days
+      const dailyVolume: { date: string; count: number }[] = [];
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split("T")[0];
+        dailyVolume.push({ date: dateStr, count: dailyMap[dateStr] || 0 });
+      }
+
+      // This month vs last month
+      const now = new Date();
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+
+      const totalThisMonth = (convos || []).filter((c: any) => new Date(c.created_at) >= thisMonthStart).length;
+
+      const { data: lastMonthConvos } = await supa
+        .from("conversations")
+        .select("id")
+        .eq("business_id", business.id)
+        .gte("created_at", lastMonthStart.toISOString())
+        .lte("created_at", lastMonthEnd.toISOString());
+
+      const totalLastMonth = (lastMonthConvos || []).length;
+
+      // Auto-reply rate
+      const total = (convos || []).length;
+      const autoReplyRate = total > 0 ? Math.round((resolvedCount / total) * 100) : 0;
+
+      return res.json({
+        dailyVolume,
+        channelBreakdown: channelMap,
+        totalThisMonth,
+        totalLastMonth,
+        autoReplyRate,
+        escalatedCount,
+        totalConversations: total,
+      });
+    } catch (err: any) {
+      console.error("Analytics error:", err);
+      return res.json({ dailyVolume: [], channelBreakdown: {}, totalThisMonth: 0, totalLastMonth: 0 });
+    }
+  });
+
   // ── Owner Chat (Private AI) ─────────────────────────────────
 
   // POST /api/owner-chat
@@ -1937,6 +2125,13 @@ Be conversational, helpful, and confirm changes before applying them.`;
           // JSON parse failed — ignore, just return the reply
         }
       }
+
+      // Save both messages to DB for persistence
+      const { supabase: chatSupa } = await import("./storage.js");
+      await chatSupa.from("owner_chat_messages").insert([
+        { business_id: business.id, role: "user", content: message.trim() },
+        { business_id: business.id, role: "assistant", content: reply, updates_applied: updates ? Object.keys(updates) : null },
+      ]);
 
       return res.json({
         reply,

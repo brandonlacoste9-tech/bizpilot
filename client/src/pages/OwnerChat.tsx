@@ -52,6 +52,24 @@ export default function OwnerChat() {
   const business = authData?.business;
   const assistantName = business?.assistantName || "IronClaw";
 
+  // Load chat history on mount
+  const { data: historyData } = useQuery<any>({
+    queryKey: ["/api/owner-chat/history"],
+  });
+
+  useEffect(() => {
+    if (historyData?.messages?.length && messages.length === 0) {
+      setMessages(
+        historyData.messages.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          updates: m.updates,
+          timestamp: new Date(m.timestamp),
+        }))
+      );
+    }
+  }, [historyData]);
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
