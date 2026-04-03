@@ -14,7 +14,19 @@ app.use(
 );
 app.use(express.urlencoded({ extended: false }));
 
-// Register all routes
-await registerRoutes(httpServer, app);
+// Register all routes (lazy initialization)
+let initialized = false;
+async function ensureInitialized() {
+  if (!initialized) {
+    await registerRoutes(httpServer, app);
+    initialized = true;
+  }
+}
 
-export default app;
+// Wrap with initialization
+const handler = async (req: any, res: any) => {
+  await ensureInitialized();
+  return app(req, res);
+};
+
+export default handler;
