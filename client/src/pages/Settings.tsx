@@ -60,6 +60,12 @@ function Section({
 // Plan card
 // ─────────────────────────────────────────────────────────────
 
+const STRIPE_LINKS = {
+  starter: "https://buy.stripe.com/9B6fZgfRX2hLd4i95v1Fe0A",
+  pro: "https://buy.stripe.com/7sY8wOcFL9Kdc0e1D31Fe0B",
+  enterprise: "https://buy.stripe.com/cNieVcbBH2hLfcq0yZ1Fe0z",
+};
+
 function PlanInfo({ plan }: { plan: string }) {
   const plans = {
     free: { label: "Free", color: "text-muted-foreground", features: ["Limited emails", "Basic support"] },
@@ -87,30 +93,36 @@ function PlanInfo({ plan }: { plan: string }) {
       {plan !== "enterprise" && (
         <div className="space-y-2">
           {plan !== "starter" && plan !== "pro" && (
-            <Button
-              data-testid="button-upgrade-starter"
-              variant="outline"
-              className="w-full justify-between border-border text-sm"
-            >
-              Upgrade to Starter — $29/mo <ArrowRight size={14} />
-            </Button>
+            <a href={STRIPE_LINKS.starter} target="_blank" rel="noopener noreferrer">
+              <Button
+                data-testid="button-upgrade-starter"
+                variant="outline"
+                className="w-full justify-between border-border text-sm"
+              >
+                Upgrade to Starter — $29/mo <ArrowRight size={14} />
+              </Button>
+            </a>
           )}
           {plan !== "pro" && (
-            <Button
-              data-testid="button-upgrade-pro"
-              className="w-full justify-between bg-primary text-primary-foreground amber-glow hover:bg-primary/90 text-sm"
-            >
-              Upgrade to Pro — $79/mo <ArrowRight size={14} />
-            </Button>
+            <a href={STRIPE_LINKS.pro} target="_blank" rel="noopener noreferrer">
+              <Button
+                data-testid="button-upgrade-pro"
+                className="w-full justify-between bg-primary text-primary-foreground amber-glow hover:bg-primary/90 text-sm"
+              >
+                Upgrade to Pro — $79/mo <ArrowRight size={14} />
+              </Button>
+            </a>
           )}
           {plan !== "enterprise" && (
-            <Button
-              data-testid="button-upgrade-enterprise"
-              variant="outline"
-              className="w-full justify-between border-border text-sm"
-            >
-              Enterprise — $199/mo <ArrowRight size={14} />
-            </Button>
+            <a href={STRIPE_LINKS.enterprise} target="_blank" rel="noopener noreferrer">
+              <Button
+                data-testid="button-upgrade-enterprise"
+                variant="outline"
+                className="w-full justify-between border-border text-sm"
+              >
+                Enterprise — $199/mo <ArrowRight size={14} />
+              </Button>
+            </a>
           )}
         </div>
       )}

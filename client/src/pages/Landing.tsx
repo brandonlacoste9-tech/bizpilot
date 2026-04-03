@@ -49,6 +49,12 @@ function FeatureCard({
   );
 }
 
+const STRIPE_LINKS: Record<string, string> = {
+  starter: "https://buy.stripe.com/9B6fZgfRX2hLd4i95v1Fe0A",
+  pro: "https://buy.stripe.com/7sY8wOcFL9Kdc0e1D31Fe0B",
+  enterprise: "https://buy.stripe.com/cNieVcbBH2hLfcq0yZ1Fe0z",
+};
+
 function PricingCard({
   name,
   price,
@@ -62,6 +68,7 @@ function PricingCard({
   highlight?: boolean;
   cta: string;
 }) {
+  const stripeLink = STRIPE_LINKS[name.toLowerCase()];
   return (
     <div
       className={`relative p-7 rounded-xl border flex flex-col ${
@@ -90,7 +97,7 @@ function PricingCard({
           </li>
         ))}
       </ul>
-      <Link href="/signup">
+      <a href={stripeLink || "#"} target="_blank" rel="noopener noreferrer">
         <Button
           data-testid={`button-pricing-${name.toLowerCase()}`}
           className={`w-full font-semibold ${
@@ -101,7 +108,7 @@ function PricingCard({
         >
           {cta}
         </Button>
-      </Link>
+      </a>
     </div>
   );
 }
