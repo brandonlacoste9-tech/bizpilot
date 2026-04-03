@@ -376,6 +376,20 @@ export async function seedDatabase() {
   const existingBusiness = await storage.getBusiness();
   if (existingBusiness) return; // Already seeded
 
+  // Wrap in try/catch — concurrent serverless cold starts may both attempt to seed
+  try {
+    return await _doSeed();
+  } catch (err: any) {
+    // If it's a unique constraint violation, another instance already seeded
+    if (err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
+      console.log("Seed skipped — another instance already seeded.");
+      return;
+    }
+    throw err;
+  }
+}
+
+async function _doSeed() {
   const now = new Date();
 
   const biz = await storage.createBusiness({
