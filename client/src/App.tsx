@@ -17,6 +17,7 @@ import Settings from "@/pages/Settings";
 import Setup from "@/pages/Setup";
 import Knowledge from "@/pages/Knowledge";
 import OwnerChat from "@/pages/OwnerChat";
+import Book from "@/pages/Book";
 import NotFound from "@/pages/not-found";
 import { UpgradeWall } from "@/components/UpgradeWall";
 
@@ -24,7 +25,7 @@ import { UpgradeWall } from "@/components/UpgradeWall";
 // Auth guard
 // ─────────────────────────────────────────────────────────────
 
-const PUBLIC_ROUTES = ["/", "/login", "/signup", "/onboarding"];
+const PUBLIC_ROUTES = ["/", "/login", "/signup", "/onboarding", "/book"];
 const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/setup", "/knowledge", "/chat"];
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -44,7 +45,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   });
 
   const isAuthenticated = !!authData?.user;
-  const isPublicRoute = PUBLIC_ROUTES.includes(location);
+  const isPublicRoute = PUBLIC_ROUTES.some((r) => location === r || location.startsWith(r + "/"));
   const isAppRoute = APP_ROUTES.some((r) => location.startsWith(r));
 
   if (isLoading) {
@@ -95,6 +96,7 @@ function AppRouter() {
         <Route path="/setup" component={Setup} />
         <Route path="/knowledge" component={Knowledge} />
         <Route path="/chat" component={OwnerChat} />
+        <Route path="/book/:id" component={Book} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>

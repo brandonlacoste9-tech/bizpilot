@@ -21,6 +21,7 @@ import {
   Bot,
   Sparkles,
   Inbox,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -585,6 +586,31 @@ export default function Setup() {
             </div>
           </ChannelCard>
         </div>
+
+        {/* ── Booking Link ── */}
+        {business?.id && (
+          <div className="mt-6 bg-card border border-primary/20 rounded-xl p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
+                <CalendarDays size={20} className="text-primary" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-foreground">Booking Link</div>
+                <div className="text-xs text-muted-foreground">
+                  Share this link so customers can book appointments directly
+                </div>
+              </div>
+            </div>
+            <CopyBlock
+              value={`https://ironclaw.ca/#/book/${business.id}`}
+              label="Your booking page URL"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Add this to your website, Google Business profile, Instagram bio, or business cards.
+              Customers pick a time slot and you get notified on Telegram.
+            </p>
+          </div>
+        )}
 
         {/* ── Try Your AI ── */}
         <div className="mt-8 bg-card border border-primary/20 rounded-xl overflow-hidden">

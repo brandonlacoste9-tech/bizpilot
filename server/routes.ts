@@ -42,6 +42,56 @@ const COOKIE_OPTIONS = {
   path: "/",
 };
 
+// Twilio phone number provisioning
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || "";
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+
+async function provisionTwilioNumber(businessId: string, businessName: string): Promise<string | null> {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) {
+    console.log("[twilio] Credentials not set — skipping phone provisioning");
+    return null;
+  }
+
+  try {
+    const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+
+    // Search for available Canadian numbers (Montreal area)
+    const available = await twilioClient.availablePhoneNumbers("CA")
+      .local
+      .list({ areaCode: 438, limit: 1 });
+
+    if (!available.length) {
+      // Fallback: try any Canadian number
+      const fallback = await twilioClient.availablePhoneNumbers("CA")
+        .local
+        .list({ limit: 1 });
+      if (!fallback.length) {
+        console.log("[twilio] No numbers available");
+        return null;
+      }
+      available.push(fallback[0]);
+    }
+
+    // Purchase the number
+    const purchased = await twilioClient.incomingPhoneNumbers.create({
+      phoneNumber: available[0].phoneNumber,
+      friendlyName: `IronClaw - ${businessName}`,
+      voiceUrl: "https://ironclaw.ca/api/twilio/voice",
+      voiceMethod: "POST",
+    });
+
+    console.log(`[twilio] ✓ Provisioned ${purchased.phoneNumber} for business ${businessId}`);
+
+    // Save to business
+    await storage.updateBusiness(businessId, { twilioPhoneNumber: purchased.phoneNumber });
+
+    return purchased.phoneNumber;
+  } catch (err: any) {
+    console.error("[twilio] Provisioning error:", err.message);
+    return null;
+  }
+}
+
 // Stripe price → plan mapping
 const PRICE_TO_PLAN: Record<string, "starter" | "pro" | "enterprise"> = {
   price_1TIA3YCzqBvMqSYF67NepaPf: "starter",
@@ -742,6 +792,136 @@ export async function registerRoutes(
 
   // ── Stripe Webhook ────────────────────────────────────────
 
+  // ── Public Booking API ──────────────────────────────────────
+
+  // GET /api/public/business/:id — public business info for booking page
+  app.get("/api/public/business/:id", async (req: Request, res: Response) => {
+    try {
+      const { supabase } = await import("./storage.js");
+      const { data: biz, error } = await supabase
+        .from("businesses")
+        .select("id, name, owner_name, phone, address, business_hours, services, assistant_name")
+        .eq("id", req.params.id)
+        .eq("is_active", true)
+        .single();
+
+      if (error || !biz) {
+        return res.status(404).json({ message: "Business not found" });
+      }
+
+      // Parse services for display
+      const services = (biz.services || []).map((s: string) => {
+        try { return JSON.parse(s); } catch { return { name: s }; }
+      });
+
+      return res.json({
+        id: biz.id,
+        name: biz.name,
+        ownerName: biz.owner_name,
+        phone: biz.phone,
+        address: biz.address,
+        businessHours: biz.business_hours?.description || null,
+        services,
+        assistantName: biz.assistant_name || "IronClaw",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to load business" });
+    }
+  });
+
+  // GET /api/public/business/:id/slots — available time slots for booking
+  app.get("/api/public/business/:id/slots", async (req: Request, res: Response) => {
+    try {
+      const { supabase } = await import("./storage.js");
+
+      // Get existing events for the next 14 days to find busy times
+      const now = new Date();
+      const twoWeeks = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      const { data: events } = await supabase
+        .from("calendar_events")
+        .select("start_time, end_time")
+        .eq("business_id", req.params.id)
+        .gte("start_time", now.toISOString())
+        .lte("start_time", twoWeeks.toISOString());
+
+      // Generate available slots for the next 14 days (9am-5pm, 1hr each)
+      const slots: { date: string; time: string; available: boolean }[] = [];
+      const busyTimes = (events || []).map((e: any) => ({
+        start: new Date(e.start_time).getTime(),
+        end: new Date(e.end_time).getTime(),
+      }));
+
+      for (let d = 1; d <= 14; d++) {
+        const date = new Date(now);
+        date.setDate(date.getDate() + d);
+        const dayOfWeek = date.getDay();
+        if (dayOfWeek === 0) continue; // Skip Sunday
+
+        const dateStr = date.toISOString().split("T")[0];
+        const startHour = 9;
+        const endHour = dayOfWeek === 6 ? 15 : 17; // Sat ends at 3pm
+
+        for (let h = startHour; h < endHour; h++) {
+          const slotStart = new Date(`${dateStr}T${String(h).padStart(2, "0")}:00:00`);
+          const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);
+
+          const isBooked = busyTimes.some(
+            (b: any) => slotStart.getTime() < b.end && slotEnd.getTime() > b.start
+          );
+
+          slots.push({
+            date: dateStr,
+            time: `${String(h).padStart(2, "0")}:00`,
+            available: !isBooked,
+          });
+        }
+      }
+
+      return res.json({ slots });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to load slots" });
+    }
+  });
+
+  // POST /api/public/business/:id/book — book an appointment (no auth needed)
+  app.post("/api/public/business/:id/book", async (req: Request, res: Response) => {
+    try {
+      const { name, email, phone, date, time, notes } = req.body;
+      if (!name || !date || !time) {
+        return res.status(400).json({ message: "Name, date, and time are required" });
+      }
+
+      const startTime = `${date}T${time}:00`;
+      const endDate = new Date(new Date(startTime).getTime() + 60 * 60 * 1000);
+      const endTime = endDate.toISOString();
+
+      const event = await storage.createCalendarEvent(req.params.id as string, {
+        title: `Appointment: ${name}`,
+        description: `${notes || ""}\nContact: ${email || ""} ${phone || ""}`.trim(),
+        startTime,
+        endTime,
+        attendees: [{ name, email: email || "" }],
+        status: "confirmed",
+      });
+
+      // Notify via Telegram
+      const { supabase: supa } = await import("./storage.js");
+      const { data: bizRow } = await supa.from("businesses").select("telegram_chat_id").eq("id", req.params.id).single();
+      if (bizRow?.telegram_chat_id) {
+        await sendTelegramMessage(
+          bizRow.telegram_chat_id,
+          `📅 *New booking!*\n\n${name} booked an appointment:\n🗓 ${date} at ${time}\n${email ? `✉️ ${email}` : ""}\n${phone ? `📞 ${phone}` : ""}\n${notes ? `📝 ${notes}` : ""}`
+        );
+      }
+
+      return res.json({ message: "Appointment booked!", event: { id: event.id, startTime, endTime } });
+    } catch (err: any) {
+      console.error("Booking error:", err);
+      return res.status(500).json({ message: err.message || "Booking failed" });
+    }
+  });
+
   // Health check endpoint
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString(), version: "1.0.0" });
@@ -840,6 +1020,23 @@ export async function registerRoutes(
           if (existing && plan) {
             await storage.updateSubscription(existing.id, { plan, status });
             console.log(`[stripe] ✓ subscription.updated: ${sub.id} → ${plan} (${status})`);
+
+            // Auto-provision phone number for Pro+ plans
+            if ((plan === "pro" || plan === "enterprise") && status === "active") {
+              const user = await storage.getUserById(existing.userId);
+              if (user) {
+                const business = await storage.getBusinessByUserId(user.id);
+                if (business && !business.twilioPhoneNumber) {
+                  const newNumber = await provisionTwilioNumber(business.id, business.name);
+                  if (newNumber && business.telegramChatId) {
+                    await sendTelegramMessage(
+                      business.telegramChatId,
+                      `📞 *Phone number assigned!*\n\nYour dedicated business number is:\n\`${newNumber}\`\n\nCustomers can now call this number and your AI will answer. Put it on your website and business cards.`
+                    );
+                  }
+                }
+              }
+            }
           } else if (!existing) {
             console.log(`[stripe] subscription ${sub.id} not linked to any user yet`);
           }
