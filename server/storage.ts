@@ -5,7 +5,7 @@ import type {
   Message, InsertMessage,
   CalendarEvent, InsertCalendarEvent,
   ActivityLog, InsertActivityLog,
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 // ── Supabase client ──────────────────────────────────────────
 

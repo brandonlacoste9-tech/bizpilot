@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage, seedDatabase } from "./storage";
-import { insertBusinessSchema, insertConversationSchema, insertMessageSchema, insertCalendarEventSchema } from "@shared/schema";
+import { insertBusinessSchema, insertConversationSchema, insertMessageSchema, insertCalendarEventSchema } from "../shared/schema.js";
 
 // ── Telegram Bot Config ─────────────────────────────────
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
