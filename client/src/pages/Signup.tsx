@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { IronClawLogo } from "@/components/AppLayout";
+import { HoneycombBackground } from "@/components/HoneycombBackground";
 import { ArrowRight, CheckCircle } from "lucide-react";
 
 export default function Signup() {
@@ -35,9 +36,11 @@ export default function Signup() {
   const onSubmit = form.handleSubmit((data) => signupMutation.mutate(data));
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <div className="relative min-h-screen bg-background flex items-center justify-center px-4 overflow-hidden">
+      <HoneycombBackground variant="page" />
+      <div className="absolute inset-0 bg-gradient-radial from-transparent to-background/80 pointer-events-none" />
       {/* Background glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-sm">
         {/* Logo */}

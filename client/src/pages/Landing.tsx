@@ -24,6 +24,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { IronClawLogo } from "@/components/AppLayout";
+import { HoneycombBackground } from "@/components/HoneycombBackground";
 
 // ─────────────────────────────────────────────────────────────
 // Components
@@ -186,8 +187,9 @@ export default function Landing() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden industrial-grid">
-        <div className="absolute inset-0 bg-gradient-to-b from-background via-background/95 to-background pointer-events-none" />
+      <section className="relative overflow-hidden">
+        <HoneycombBackground variant="hero" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background pointer-events-none" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-28 text-center">
@@ -237,7 +239,9 @@ export default function Landing() {
       </section>
 
       {/* ── Features ── */}
-      <section id="features" className="py-24 max-w-6xl mx-auto px-6">
+      <section id="features" className="relative py-24 overflow-hidden">
+        <HoneycombBackground variant="section" />
+        <div className="relative max-w-6xl mx-auto px-6">
         <div className="text-center mb-14">
           <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Features</div>
           <h2 className="text-3xl md:text-4xl font-black mb-4">
@@ -270,11 +274,13 @@ export default function Landing() {
             description="Conversations are tagged, prioritized, and summarized so you always know what needs action."
           />
         </div>
+        </div>
       </section>
 
       {/* ── How It Works ── */}
-      <section id="how-it-works" className="py-24 bg-card border-y border-border">
-        <div className="max-w-6xl mx-auto px-6">
+      <section id="how-it-works" className="relative py-24 bg-card/80 border-y border-border overflow-hidden">
+        <HoneycombBackground variant="section" />
+        <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">How It Works</div>
             <h2 className="text-3xl md:text-4xl font-black mb-4">
@@ -317,7 +323,9 @@ export default function Landing() {
       </section>
 
       {/* ── Pricing ── */}
-      <section id="pricing" className="py-24 max-w-6xl mx-auto px-6">
+      <section id="pricing" className="relative py-24 overflow-hidden">
+        <HoneycombBackground variant="section" />
+        <div className="relative max-w-6xl mx-auto px-6">
         <div className="text-center mb-14">
           <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Pricing</div>
           <h2 className="text-3xl md:text-4xl font-black mb-4">
@@ -370,11 +378,13 @@ export default function Landing() {
             ]}
           />
         </div>
+        </div>
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="py-24 bg-card border-y border-border">
-        <div className="max-w-3xl mx-auto px-6">
+      <section id="faq" className="relative py-24 bg-card/80 border-y border-border overflow-hidden">
+        <HoneycombBackground variant="section" />
+        <div className="relative max-w-3xl mx-auto px-6">
           <div className="text-center mb-14">
             <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">FAQ</div>
             <h2 className="text-3xl md:text-4xl font-black mb-4">Frequently asked questions</h2>
@@ -425,7 +435,9 @@ export default function Landing() {
       </section>
 
       {/* ── Waitlist CTA ── */}
-      <section className="py-24 max-w-6xl mx-auto px-6 text-center">
+      <section className="relative py-24 overflow-hidden">
+        <HoneycombBackground variant="section" />
+        <div className="relative max-w-6xl mx-auto px-6 text-center">
         <div className="max-w-2xl mx-auto">
           <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
             <Zap size={26} className="text-primary" />
@@ -460,6 +472,7 @@ export default function Landing() {
             </Button>
           </div>
           <p className="text-muted-foreground text-xs mt-4">Or just <Link href="/signup"><span className="text-primary hover:underline cursor-pointer">create an account now →</span></Link></p>
+        </div>
         </div>
       </section>
 

@@ -11,6 +11,7 @@ import {
   LogOut,
   Zap,
 } from "lucide-react";
+import { HoneycombBackground } from "@/components/HoneycombBackground";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -149,8 +150,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-background">
-        {children}
+      <main className="relative flex-1 overflow-auto bg-background">
+        <div className="fixed inset-0 left-60 pointer-events-none">
+          <HoneycombBackground variant="app" />
+        </div>
+        <div className="relative">{children}</div>
       </main>
     </div>
   );
