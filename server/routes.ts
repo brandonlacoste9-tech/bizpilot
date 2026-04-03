@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage, seedDatabase } from "./storage";
+import { storage, seedDatabase } from "./storage.js";
 import { insertBusinessSchema, insertConversationSchema, insertMessageSchema, insertCalendarEventSchema } from "../shared/schema.js";
 
 // ── Telegram Bot Config ─────────────────────────────────
