@@ -1309,6 +1309,8 @@ export async function registerRoutes(
               }
             }
           }
+        } else if (text === "/voice" || text === "") {
+          // Handled below in voice message section
         } else if (text === "/pause") {
           const business = await getBusinessByTelegramChatId(chatId);
           if (!business) {
@@ -1324,6 +1326,124 @@ export async function registerRoutes(
           } else {
             await storage.updateBusiness(business.id, { autoReplyEnabled: true });
             await sendTelegramMessage(chatId, "▶️ Auto-replies *resumed*. Your AI assistant is back on duty.");
+          }
+        }
+      }
+
+      // Handle voice messages — transcribe with Whisper and process as owner command
+      if (update.message?.voice) {
+        const chatId = update.message.chat?.id?.toString();
+        const fileId = update.message.voice.file_id;
+        const business = await getBusinessByTelegramChatId(chatId);
+
+        if (!business) {
+          await sendTelegramMessage(chatId, "❌ No business linked to this chat. Use the link from your dashboard to connect.");
+        } else {
+          try {
+            // 1. Get file path from Telegram
+            const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
+            const fileData: any = await fileRes.json();
+            const filePath = fileData.result?.file_path;
+
+            if (!filePath) {
+              await sendTelegramMessage(chatId, "❌ Couldn't process voice message. Try again.");
+            } else {
+              // 2. Download the voice file
+              const audioRes = await fetch(`https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`);
+              const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
+
+              // 3. Transcribe with OpenAI Whisper
+              const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+              if (!OPENAI_API_KEY) {
+                await sendTelegramMessage(chatId, "❌ AI not configured. Ask your admin to set the OpenAI API key.");
+              } else {
+                const FormData = (await import("form-data")).default;
+                const formData = new FormData();
+                formData.append("file", audioBuffer, { filename: "voice.ogg", contentType: "audio/ogg" });
+                formData.append("model", "whisper-1");
+
+                const whisperRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${OPENAI_API_KEY}`,
+                    ...formData.getHeaders(),
+                  },
+                  body: formData as any,
+                });
+
+                const whisperData: any = await whisperRes.json();
+                const transcription = whisperData.text?.trim();
+
+                if (!transcription) {
+                  await sendTelegramMessage(chatId, "❌ Couldn't understand the voice message. Try speaking more clearly.");
+                } else {
+                  // 4. Send transcription confirmation
+                  await sendTelegramMessage(chatId, `🎙️ *Heard:* "${transcription}"\n\nProcessing...`);
+
+                  // 5. Process as owner chat — same as /api/owner-chat but via Telegram
+                  const currentServices = (business.services || []).map((s: string) => {
+                    try { return JSON.parse(s); } catch { return { name: s }; }
+                  });
+                  const ownerPrompt = `You are the private AI assistant for ${business.ownerName || "the owner"} of ${business.name}. The owner just sent a voice message (transcribed below). Help them and update the Knowledge Base if needed.
+
+Current services: ${JSON.stringify(currentServices)}
+Current hours: ${business.businessHours?.description || "Not set"}
+Current FAQs: ${JSON.stringify(business.faqEntries || [])}
+Current policies: ${business.aiInstructions || "Not set"}
+
+If the owner is asking to change something, make the change and output a JSON block at the END:
+{"kb_update": {"services": [...], "faqEntries": [...], "businessHours": "...", "aiInstructions": "..."}}
+Only include changed fields. Keep your reply short and conversational (this is Telegram).`;
+
+                  const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${OPENAI_API_KEY}`,
+                    },
+                    body: JSON.stringify({
+                      model: "gpt-4o-mini",
+                      messages: [
+                        { role: "system", content: ownerPrompt },
+                        { role: "user", content: transcription },
+                      ],
+                      max_tokens: 500,
+                    }),
+                  });
+
+                  const chatData: any = await chatRes.json();
+                  let aiReply = chatData.choices?.[0]?.message?.content || "Done.";
+
+                  // Parse and apply kb_update if present
+                  const kbMatch = aiReply.match(/(\{"kb_update":[\s\S]*\})\s*$/);
+                  if (kbMatch) {
+                    try {
+                      const parsed = JSON.parse(kbMatch[1]);
+                      if (parsed.kb_update) {
+                        const upd: any = {};
+                        if (parsed.kb_update.services) {
+                          upd.services = parsed.kb_update.services.map((s: any) =>
+                            typeof s === "string" ? s : JSON.stringify(s)
+                          );
+                        }
+                        if (parsed.kb_update.faqEntries) upd.faqEntries = parsed.kb_update.faqEntries;
+                        if (parsed.kb_update.businessHours) upd.businessHours = { description: parsed.kb_update.businessHours };
+                        if (parsed.kb_update.aiInstructions) upd.aiInstructions = parsed.kb_update.aiInstructions;
+                        if (Object.keys(upd).length > 0) {
+                          await storage.updateBusiness(business.id, upd);
+                          aiReply = aiReply.replace(kbMatch[0], "").trim() + "\n\n✅ _Knowledge Base updated._";
+                        }
+                      }
+                    } catch {}
+                  }
+
+                  await sendTelegramMessage(chatId, aiReply);
+                }
+              }
+            }
+          } catch (voiceErr: any) {
+            console.error("Telegram voice error:", voiceErr);
+            await sendTelegramMessage(chatId, "❌ Error processing voice message. Please try again.");
           }
         }
       }
@@ -1350,6 +1470,123 @@ export async function registerRoutes(
       return res.json({ message: "Notification sent" });
     } catch (err: any) {
       return res.status(500).json({ message: "Failed to send Telegram notification" });
+    }
+  });
+
+  // ── Owner Chat (Private AI) ─────────────────────────────────
+
+  // POST /api/owner-chat
+  // Private chat between the business owner and their AI.
+  // The AI can update the Knowledge Base when instructed.
+  app.post("/api/owner-chat", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) {
+        return res.status(400).json({ message: "No business profile found." });
+      }
+
+      const { message } = req.body;
+      if (!message || typeof message !== "string" || !message.trim()) {
+        return res.status(400).json({ message: "Message is required" });
+      }
+
+      const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+      if (!OPENAI_API_KEY) {
+        return res.json({ reply: "AI is not configured yet. Please add your OpenAI API key.", updates: null });
+      }
+
+      // Build context about current knowledge base
+      const currentServices = (business.services || []).map((s: string) => {
+        try { return JSON.parse(s); } catch { return { name: s }; }
+      });
+      const currentFaqs = business.faqEntries || [];
+      const currentHours = business.businessHours?.description || JSON.stringify(business.businessHours || {});
+      const currentPolicies = business.aiInstructions || "";
+
+      const systemPrompt = `You are the private AI assistant for ${business.ownerName || "the owner"} of ${business.name}. This is a PRIVATE conversation with the owner — not a customer.
+
+Your role: Help the owner manage their business and update their AI Knowledge Base.
+
+## Current Knowledge Base
+Services: ${JSON.stringify(currentServices)}
+Business Hours: ${currentHours}
+FAQs: ${JSON.stringify(currentFaqs)}
+Policies: ${currentPolicies}
+
+## What you can do:
+- Answer questions about the business
+- Update services, prices, hours, FAQs, or policies when the owner asks
+- Suggest improvements to the knowledge base
+- Help draft customer responses
+
+## IMPORTANT: When the owner asks to change/add/remove something, output a JSON block at the END of your reply:
+{"kb_update": {"services": [...], "faqEntries": [...], "businessHours": "...", "aiInstructions": "..."}}
+Only include the fields that changed. Services should be objects with {name, description, price}.
+If no update is needed, don't include the JSON block.
+
+Be conversational, helpful, and confirm changes before applying them.`;
+
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: message.trim() },
+          ],
+          max_tokens: 800,
+        }),
+      });
+
+      const data: any = await response.json();
+      const content: string = data.choices?.[0]?.message?.content || "Sorry, I couldn't process that.";
+
+      // Parse out kb_update JSON if present
+      let updates: any = null;
+      let reply = content;
+      const kbMatch = content.match(/\{"kb_update":\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}\}/);
+      // More robust: look for the JSON block
+      const jsonBlockMatch = content.match(/(\{"kb_update":[\s\S]*\})\s*$/);
+      if (jsonBlockMatch) {
+        try {
+          const parsed = JSON.parse(jsonBlockMatch[1]);
+          if (parsed.kb_update) {
+            updates = parsed.kb_update;
+            reply = content.replace(jsonBlockMatch[0], "").trim();
+
+            // Apply updates to business
+            const updatePayload: any = {};
+            if (updates.services) {
+              updatePayload.services = updates.services.map((s: any) =>
+                typeof s === "string" ? s : JSON.stringify(s)
+              );
+            }
+            if (updates.faqEntries) updatePayload.faqEntries = updates.faqEntries;
+            if (updates.businessHours) {
+              updatePayload.businessHours = { description: updates.businessHours };
+            }
+            if (updates.aiInstructions) updatePayload.aiInstructions = updates.aiInstructions;
+
+            if (Object.keys(updatePayload).length > 0) {
+              await storage.updateBusiness(business.id, updatePayload);
+            }
+          }
+        } catch {
+          // JSON parse failed — ignore, just return the reply
+        }
+      }
+
+      return res.json({
+        reply,
+        updates: updates ? Object.keys(updates) : null,
+      });
+    } catch (err: any) {
+      console.error("Owner chat error:", err);
+      return res.status(500).json({ message: err.message || "Chat failed" });
     }
   });
 

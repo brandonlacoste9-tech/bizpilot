@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   BookOpen,
+  MessageCircle,
 } from "lucide-react";
 import { HoneycombBackground } from "@/components/HoneycombBackground";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const NAV: NavItem[] = [
   { href: "/inbox", label: "Inbox", icon: <Inbox size={18} /> },
   { href: "/calendar", label: "Calendar", icon: <CalendarDays size={18} /> },
   { href: "/knowledge", label: "Knowledge", icon: <BookOpen size={18} /> },
+  { href: "/chat", label: "My AI", icon: <MessageCircle size={18} /> },
   { href: "/setup", label: "Setup", icon: <Plug size={18} /> },
   { href: "/settings", label: "Settings", icon: <Settings size={18} /> },
 ];
