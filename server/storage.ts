@@ -80,6 +80,8 @@ function mapBusiness(row: any): Business {
     assistantName: row.assistant_name ?? "IronClaw",
     telegramChatId: row.telegram_chat_id,
     twilioPhoneNumber: row.twilio_phone_number,
+    personalPhone: row.personal_phone,
+    callRoutingMode: row.call_routing_mode,
     forwardingEmail: row.forwarding_email,
     emailNotifications: row.email_notifications,
     smsNotifications: row.sms_notifications,
@@ -373,6 +375,8 @@ export class DatabaseStorage implements IStorage {
     if (data.assistantName !== undefined) updates.assistant_name = data.assistantName;
     if (data.telegramChatId !== undefined) updates.telegram_chat_id = data.telegramChatId;
     if (data.twilioPhoneNumber !== undefined) updates.twilio_phone_number = data.twilioPhoneNumber;
+    if (data.personalPhone !== undefined) updates.personal_phone = data.personalPhone;
+    if (data.callRoutingMode !== undefined) updates.call_routing_mode = data.callRoutingMode;
     if (data.forwardingEmail !== undefined) updates.forwarding_email = data.forwardingEmail;
     if (data.emailNotifications !== undefined) updates.email_notifications = data.emailNotifications;
     if (data.smsNotifications !== undefined) updates.sms_notifications = data.smsNotifications;

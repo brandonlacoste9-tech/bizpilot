@@ -545,10 +545,71 @@ export default function Setup() {
                       <div className="text-xs text-muted-foreground font-mono">{twilioNumber}</div>
                     </div>
                   </div>
-                  <p className="text-sm text-foreground">
-                    When someone calls this number, your AI assistant answers, takes a message,
-                    records and transcribes the call, and notifies you via Telegram.
+                  <p className="text-xs text-muted-foreground">
+                    Put this number on your website, business cards, and Google Business profile.
                   </p>
+
+                  {/* Call routing toggle */}
+                  <div className="bg-background rounded-lg border border-border p-4 space-y-3">
+                    <div className="text-xs font-semibold text-foreground uppercase tracking-wide">Call Routing</div>
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-3 p-2.5 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors">
+                        <input
+                          type="radio"
+                          name="callRouting"
+                          checked={!business?.personalPhone || business?.callRoutingMode === "ai_only"}
+                          onChange={() => {
+                            apiRequest("PATCH", "/api/business", { callRoutingMode: "ai_only" });
+                            queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                          }}
+                          className="mt-1 accent-[hsl(38,92%,50%)]"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-foreground">AI answers all calls</div>
+                          <div className="text-xs text-muted-foreground">Every call goes straight to your AI assistant</div>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 p-2.5 rounded-lg cursor-pointer hover:bg-secondary/30 transition-colors">
+                        <input
+                          type="radio"
+                          name="callRouting"
+                          checked={business?.callRoutingMode === "ring_first"}
+                          onChange={() => {
+                            apiRequest("PATCH", "/api/business", { callRoutingMode: "ring_first" });
+                            queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                          }}
+                          className="mt-1 accent-[hsl(38,92%,50%)]"
+                        />
+                        <div>
+                          <div className="text-sm font-medium text-foreground">Ring me first, then AI</div>
+                          <div className="text-xs text-muted-foreground">Tries your cell for 15 seconds. If you don't answer, the AI takes a message.</div>
+                        </div>
+                      </label>
+                    </div>
+
+                    {business?.callRoutingMode === "ring_first" && (
+                      <div className="space-y-1.5 pt-2">
+                        <div className="text-xs font-medium text-muted-foreground">Your cell phone number</div>
+                        <div className="flex gap-2">
+                          <input
+                            type="tel"
+                            placeholder="+1 (555) 000-0000"
+                            defaultValue={business?.personalPhone || ""}
+                            className="flex-1 px-3 py-2 rounded-lg bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground"
+                            onBlur={(e) => {
+                              if (e.target.value.trim()) {
+                                apiRequest("PATCH", "/api/business", { personalPhone: e.target.value.trim() });
+                                queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+                              }
+                            }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          We'll try this number first. If you don't pick up, the AI handles it.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : plan === "free" || plan === "starter" ? (
                 <div className="space-y-3">

@@ -41,6 +41,8 @@ export interface Business {
   assistantName: string;
   telegramChatId?: string | null;
   twilioPhoneNumber?: string | null;
+  personalPhone?: string | null;
+  callRoutingMode?: string | null; // "ai_only" | "ring_first"
   forwardingEmail?: string | null;
   emailNotifications?: boolean | null;
   smsNotifications?: boolean | null;
@@ -160,6 +162,8 @@ export const insertBusinessSchema = z.object({
   assistantName: z.string().default("IronClaw"),
   telegramChatId: z.string().optional(),
   twilioPhoneNumber: z.string().optional(),
+  personalPhone: z.string().optional(),
+  callRoutingMode: z.string().optional(),
   forwardingEmail: z.string().optional(),
   emailNotifications: z.boolean().optional(),
   smsNotifications: z.boolean().optional(),

@@ -1224,28 +1224,92 @@ export async function registerRoutes(
 
       const businessName = business?.name || "our business";
       const assistantName = business?.assistantName || "IronClaw";
+      const callRoutingMode = business?.callRoutingMode || "ai_only";
+      const personalPhone = business?.personalPhone;
 
       const twiml = new VoiceResponse();
 
-      twiml.say(
-        { voice: "Polly.Amy" },
-        `Thank you for calling ${businessName}. Our AI assistant ${assistantName} is here to help. Please leave your name, phone number, and a brief message after the beep, and we'll get back to you shortly.`
-      );
+      // "Ring me first" mode: try the owner's cell, then fall back to AI
+      if (callRoutingMode === "ring_first" && personalPhone) {
+        twiml.say(
+          { voice: "Polly.Amy" },
+          `Thank you for calling ${businessName}. Please hold while we connect you.`
+        );
 
-      const record = twiml.record({
-        maxLength: 120,
-        transcribe: true,
-        transcribeCallback: "/api/twilio/transcription",
-        recordingStatusCallback: "/api/twilio/recording-status",
-      });
-      void record;
+        // Dial the owner's cell — if they don't answer in 15s, fall through to AI voicemail
+        const dial = twiml.dial({
+          timeout: 15,
+          action: "/api/twilio/voice-fallback",
+          method: "POST",
+        });
+        dial.number(personalPhone);
+      } else {
+        // Default AI-only mode
+        twiml.say(
+          { voice: "Polly.Amy" },
+          `Thank you for calling ${businessName}. Our AI assistant ${assistantName} is here to help. Please leave your name, phone number, and a brief message after the beep, and we'll get back to you shortly.`
+        );
 
-      twiml.say({ voice: "Polly.Amy" }, "We didn't receive a recording. Goodbye.");
+        const record = twiml.record({
+          maxLength: 120,
+          transcribe: true,
+          transcribeCallback: "/api/twilio/transcription",
+          recordingStatusCallback: "/api/twilio/recording-status",
+        });
+        void record;
+
+        twiml.say({ voice: "Polly.Amy" }, "We didn't receive a recording. Goodbye.");
+      }
 
       res.set("Content-Type", "text/xml");
       return res.send(twiml.toString());
     } catch (err: any) {
       console.error("Twilio voice error:", err);
+      const twiml = new VoiceResponse();
+      twiml.say("Sorry, there was an error. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      return res.send(twiml.toString());
+    }
+  });
+
+  // POST /api/twilio/voice-fallback
+  // Called by Twilio when owner doesn't answer in "ring first" mode
+  app.post("/api/twilio/voice-fallback", async (req: Request, res: Response) => {
+    try {
+      const calledNumber = req.body.Called || req.body.To || "";
+      const dialStatus = req.body.DialCallStatus || "no-answer";
+      const business = await storage.getBusinessByTwilioNumber(calledNumber);
+
+      const businessName = business?.name || "our business";
+      const assistantName = business?.assistantName || "IronClaw";
+
+      const twiml = new VoiceResponse();
+
+      if (dialStatus === "completed") {
+        // Owner answered — call is done
+        twiml.hangup();
+      } else {
+        // Owner didn't answer — AI takes over
+        twiml.say(
+          { voice: "Polly.Amy" },
+          `Sorry, ${businessName} is unavailable right now. Our AI assistant ${assistantName} will take your message. Please leave your name, number, and a brief message after the beep.`
+        );
+
+        const record = twiml.record({
+          maxLength: 120,
+          transcribe: true,
+          transcribeCallback: "/api/twilio/transcription",
+          recordingStatusCallback: "/api/twilio/recording-status",
+        });
+        void record;
+
+        twiml.say({ voice: "Polly.Amy" }, "We didn't receive a recording. Goodbye.");
+      }
+
+      res.set("Content-Type", "text/xml");
+      return res.send(twiml.toString());
+    } catch (err: any) {
+      console.error("Twilio voice-fallback error:", err);
       const twiml = new VoiceResponse();
       twiml.say("Sorry, there was an error. Please try again later.");
       res.set("Content-Type", "text/xml");
