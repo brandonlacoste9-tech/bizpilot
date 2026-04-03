@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
@@ -30,6 +31,8 @@ const JWT_SECRET =
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN ||
   "8742735228:AAEgtHawWmQKFzt66lknioB2XI6DzNad4UI";
+
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -638,16 +641,39 @@ export async function registerRoutes(
 
   // ── Stripe Webhook ────────────────────────────────────────
 
-  // POST /api/stripe/webhook
-  // NOTE: No requireAuth — this is called by Stripe directly
-  // TODO: Add Stripe signature verification using req.rawBody and STRIPE_WEBHOOK_SECRET
   // Health check endpoint
   app.get("/api/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", timestamp: new Date().toISOString(), version: "1.0.0" });
   });
 
+  // POST /api/stripe/webhook
+  // NOTE: No requireAuth — this is called by Stripe directly
   app.post("/api/stripe/webhook", async (req: Request, res: Response) => {
     try {
+      // Verify Stripe signature if webhook secret is configured
+      if (STRIPE_WEBHOOK_SECRET && (req as any).rawBody) {
+        const sig = req.headers["stripe-signature"] as string;
+        if (!sig) {
+          return res.status(400).json({ message: "Missing stripe-signature header" });
+        }
+        const elements = sig.split(",").reduce((acc: Record<string, string>, item) => {
+          const [key, value] = item.split("=");
+          acc[key] = value;
+          return acc;
+        }, {});
+        const timestamp = elements["t"];
+        const expectedSig = elements["v1"];
+        const payload = `${timestamp}.${(req as any).rawBody.toString()}`;
+        const computedSig = crypto
+          .createHmac("sha256", STRIPE_WEBHOOK_SECRET)
+          .update(payload)
+          .digest("hex");
+        if (computedSig !== expectedSig) {
+          console.error("[stripe] Invalid webhook signature");
+          return res.status(400).json({ message: "Invalid signature" });
+        }
+      }
+
       const event = req.body;
 
       if (event.type === "checkout.session.completed") {
