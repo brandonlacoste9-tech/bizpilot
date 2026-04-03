@@ -226,7 +226,8 @@ export async function registerRoutes(
       const business = await storage.getBusinessByUserId(req.userId!);
       if (!business) return res.status(404).json({ message: "No business found" });
 
-      const { status, category } = req.query as Record<string, string>;
+      const status = String(req.query.status || "") || undefined;
+      const category = String(req.query.category || "") || undefined;
       const conversations = await storage.listConversations(business.id, { status, category });
       return res.json(conversations);
     } catch (err: any) {
@@ -240,7 +241,7 @@ export async function registerRoutes(
       const business = await storage.getBusinessByUserId(req.userId!);
       if (!business) return res.status(404).json({ message: "No business found" });
 
-      const conversation = await storage.getConversation(req.params.id, business.id);
+      const conversation = await storage.getConversation(String(req.params.id), business.id);
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
 
       const messages = await storage.listMessagesByConversation(conversation.id);
@@ -279,7 +280,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0].message });
       }
 
-      const updated = await storage.updateConversation(req.params.id, business.id, parsed.data);
+      const updated = await storage.updateConversation(String(req.params.id), business.id, parsed.data);
       if (!updated) return res.status(404).json({ message: "Conversation not found" });
 
       return res.json(updated);
@@ -294,7 +295,7 @@ export async function registerRoutes(
       const business = await storage.getBusinessByUserId(req.userId!);
       if (!business) return res.status(404).json({ message: "No business found" });
 
-      const conversation = await storage.getConversation(req.params.id, business.id);
+      const conversation = await storage.getConversation(String(req.params.id), business.id);
       if (!conversation) return res.status(404).json({ message: "Conversation not found" });
 
       const parsed = insertMessageSchema.safeParse(req.body);
@@ -309,7 +310,7 @@ export async function registerRoutes(
       );
 
       // Update conversation status
-      await storage.updateConversation(req.params.id, business.id, {
+      await storage.updateConversation(String(req.params.id), business.id, {
         status: "in_progress",
         ownerAction: "replied",
       });
@@ -334,7 +335,8 @@ export async function registerRoutes(
       const business = await storage.getBusinessByUserId(req.userId!);
       if (!business) return res.status(404).json({ message: "No business found" });
 
-      const { from, to } = req.query as Record<string, string>;
+      const from = req.query.from ? String(req.query.from) : undefined;
+      const to = req.query.to ? String(req.query.to) : undefined;
       const events = await storage.listCalendarEvents(business.id, from, to);
       return res.json(events);
     } catch (err: any) {
@@ -378,7 +380,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0].message });
       }
 
-      const updated = await storage.updateCalendarEvent(req.params.id, business.id, parsed.data);
+      const updated = await storage.updateCalendarEvent(String(req.params.id), business.id, parsed.data);
       if (!updated) return res.status(404).json({ message: "Event not found" });
       return res.json(updated);
     } catch (err: any) {
@@ -391,7 +393,7 @@ export async function registerRoutes(
     try {
       const business = await storage.getBusinessByUserId(req.userId!);
       if (!business) return res.status(404).json({ message: "No business found" });
-      await storage.deleteCalendarEvent(req.params.id, business.id);
+      await storage.deleteCalendarEvent(String(req.params.id), business.id);
       return res.json({ message: "Event deleted" });
     } catch (err: any) {
       return res.status(500).json({ message: "Failed to delete event" });
