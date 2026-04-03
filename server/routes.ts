@@ -641,16 +641,34 @@ export async function registerRoutes(
   // POST /api/stripe/webhook
   // NOTE: No requireAuth — this is called by Stripe directly
   // TODO: Add Stripe signature verification using req.rawBody and STRIPE_WEBHOOK_SECRET
+  // Health check endpoint
+  app.get("/api/health", (_req: Request, res: Response) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString(), version: "1.0.0" });
+  });
+
   app.post("/api/stripe/webhook", async (req: Request, res: Response) => {
     try {
       const event = req.body;
 
       if (event.type === "checkout.session.completed") {
         const session = event.data.object;
-        const customerEmail = session.customer_email || session.customer_details?.email;
-        const priceId =
-          session.line_items?.data?.[0]?.price?.id ||
-          session.metadata?.price_id;
+        const customerEmail =
+          session.customer_email ||
+          session.customer_details?.email;
+
+        // Stripe payment links pass price_id in metadata (we set this),
+        // or we can check subscription items
+        let priceId =
+          session.metadata?.price_id ||
+          session.line_items?.data?.[0]?.price?.id;
+
+        // If no priceId yet but subscription exists, Stripe will send
+        // customer.subscription.created which we also handle below.
+        // For payment links, we map the subscription to extract the price.
+        if (!priceId && session.subscription) {
+          // We'll rely on subscription.updated event for price detection
+          console.log(`[stripe] checkout completed, no line_items — deferring to subscription event`);
+        }
 
         if (customerEmail && priceId) {
           const plan = PRICE_TO_PLAN[priceId];
@@ -663,31 +681,56 @@ export async function registerRoutes(
                 stripeCustomerId: session.customer,
                 stripeSubscriptionId: session.subscription,
               });
+              console.log(`[stripe] ✓ upgraded ${customerEmail} → ${plan}`);
+            } else {
+              console.log(`[stripe] user not found for ${customerEmail}`);
             }
+          }
+        } else if (customerEmail && session.subscription) {
+          // Still link the Stripe IDs even without price mapping
+          const user = await storage.getUserByEmail(customerEmail);
+          if (user) {
+            await storage.updateSubscriptionByUserId(user.id, {
+              stripeCustomerId: session.customer,
+              stripeSubscriptionId: session.subscription,
+            });
+            console.log(`[stripe] linked Stripe IDs for ${customerEmail}`);
           }
         }
       }
 
-      if (event.type === "customer.subscription.updated") {
+      if (
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.created"
+      ) {
         const sub = event.data.object;
         const priceId = sub.items?.data?.[0]?.price?.id;
         const plan = priceId ? PRICE_TO_PLAN[priceId] : undefined;
+        const status = sub.status === "active" ? "active" : sub.status;
 
-        // Find subscription by stripeSubscriptionId
-        // We'll update by stripeCustomerId approach via a brute-force user lookup
-        // For now update by subscription ID if we can find it
-        if (sub.id && plan) {
-          // Try to find via customer email from Stripe metadata
-          // As a best-effort, log the event
-          console.log(`[stripe] subscription.updated: ${sub.id} → ${plan}`);
+        if (sub.id) {
+          const existing = await storage.getSubscriptionByStripeSubscriptionId(sub.id);
+          if (existing && plan) {
+            await storage.updateSubscription(existing.id, { plan, status });
+            console.log(`[stripe] ✓ subscription.updated: ${sub.id} → ${plan} (${status})`);
+          } else if (!existing) {
+            console.log(`[stripe] subscription ${sub.id} not linked to any user yet`);
+          }
         }
       }
 
       if (event.type === "customer.subscription.deleted") {
         const sub = event.data.object;
-        console.log(`[stripe] subscription.deleted: ${sub.id}`);
-        // Downgrade to free — would need to look up by stripeSubscriptionId
-        // Best-effort: log for now until we add a lookup method
+        const existing = await storage.getSubscriptionByStripeSubscriptionId(sub.id);
+        if (existing) {
+          await storage.updateSubscription(existing.id, {
+            plan: "free",
+            status: "canceled",
+          });
+          console.log(`[stripe] ✓ subscription.deleted: ${sub.id} → free`);
+        } else {
+          console.log(`[stripe] subscription.deleted: ${sub.id} — not found in DB`);
+        }
       }
 
       return res.json({ received: true });

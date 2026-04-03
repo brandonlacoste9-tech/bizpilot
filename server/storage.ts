@@ -179,6 +179,7 @@ export interface IStorage {
   getSubscriptionByUserId(userId: string): Promise<Subscription | null>;
   updateSubscription(id: string, updates: Partial<Subscription>): Promise<Subscription | null>;
   updateSubscriptionByUserId(userId: string, updates: Partial<Subscription>): Promise<Subscription | null>;
+  getSubscriptionByStripeSubscriptionId(stripeSubId: string): Promise<Subscription | null>;
 
   // Businesses
   createBusiness(userId: string, data: InsertBusiness): Promise<Business>;
@@ -306,6 +307,16 @@ export class DatabaseStorage implements IStorage {
     const existing = await this.getSubscriptionByUserId(userId);
     if (!existing) return null;
     return this.updateSubscription(existing.id, updates);
+  }
+
+  async getSubscriptionByStripeSubscriptionId(stripeSubId: string): Promise<Subscription | null> {
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("stripe_subscription_id", stripeSubId)
+      .single();
+    if (error) return null;
+    return mapSubscription(data);
   }
 
   // ─── Businesses ───────────────────────────────────────────
