@@ -22,6 +22,8 @@ import {
   Shield,
   TrendingUp,
   ChevronRight,
+  Phone,
+  Smartphone,
 } from "lucide-react";
 import { IronClawLogo } from "@/components/AppLayout";
 import { HoneycombBackground } from "@/components/HoneycombBackground";
@@ -266,14 +268,14 @@ export default function Landing() {
             description="Automatically books appointments based on your availability. Clients get instant confirmation."
           />
           <FeatureCard
-            icon={<MessageSquare size={22} />}
-            title="Telegram Control"
-            description="Approve or reject AI actions from your phone. Get daily briefings. Control everything on the go."
+            icon={<Phone size={22} />}
+            title="Phone & SMS"
+            description="Your AI answers calls, takes messages, and replies to texts instantly. Customers get help 24/7 — even when you're busy."
           />
           <FeatureCard
-            icon={<Brain size={22} />}
-            title="Smart Categorization"
-            description="Conversations are tagged, prioritized, and summarized so you always know what needs action."
+            icon={<Smartphone size={22} />}
+            title="Telegram Control"
+            description="Manage your business from your phone. Send voice commands, check stats, reply to customers — all from Telegram."
           />
         </div>
         </div>
@@ -357,11 +359,11 @@ export default function Landing() {
             highlight
             features={[
               "Everything in Starter",
-              "Unlimited emails",
-              "Calendar sync & scheduling",
+              "Unlimited emails & SMS",
+              "Dedicated phone number",
+              "Public booking page",
               "Custom AI instructions",
-              "Priority support",
-              "Advanced categorization",
+              "Smart call routing",
             ]}
           />
           <PricingCard
