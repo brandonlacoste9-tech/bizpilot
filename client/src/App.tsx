@@ -15,6 +15,7 @@ import Inbox from "@/pages/Inbox";
 import CalendarPage from "@/pages/Calendar";
 import Settings from "@/pages/Settings";
 import Setup from "@/pages/Setup";
+import Knowledge from "@/pages/Knowledge";
 import NotFound from "@/pages/not-found";
 import { UpgradeWall } from "@/components/UpgradeWall";
 
@@ -23,7 +24,7 @@ import { UpgradeWall } from "@/components/UpgradeWall";
 // ─────────────────────────────────────────────────────────────
 
 const PUBLIC_ROUTES = ["/", "/login", "/signup", "/onboarding"];
-const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/setup"];
+const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/setup", "/knowledge"];
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -91,6 +92,7 @@ function AppRouter() {
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/settings" component={Settings} />
         <Route path="/setup" component={Setup} />
+        <Route path="/knowledge" component={Knowledge} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>

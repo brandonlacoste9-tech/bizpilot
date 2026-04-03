@@ -96,26 +96,54 @@ async function processWithAI(
     };
   }
 
-  const services = business.services?.join(", ") || "various services";
+  // Parse rich services (may be JSON-encoded objects or plain strings)
+  const servicesList = (business.services || []).map((s: string) => {
+    try {
+      const parsed = JSON.parse(s);
+      if (parsed.name) {
+        let line = `- ${parsed.name}`;
+        if (parsed.price) line += ` — ${parsed.price}`;
+        if (parsed.description) line += `\n  ${parsed.description}`;
+        return line;
+      }
+    } catch {}
+    return `- ${s}`;
+  });
+  const servicesText = servicesList.length > 0 ? servicesList.join("\n") : "Various services (ask the owner for details)";
+
   const faq = business.faqEntries
-    ?.map((f: { question: string; answer: string }) => `Q: ${f.question}\nA: ${f.answer}`)
-    .join("\n") || "";
-  const hours = business.businessHours
-    ? JSON.stringify(business.businessHours)
-    : "Regular business hours";
+    ?.filter((f: { question: string; answer: string }) => f.question && f.answer)
+    .map((f: { question: string; answer: string }) => `Q: ${f.question}\nA: ${f.answer}`)
+    .join("\n\n") || "";
+
+  const hours = business.businessHours?.description
+    || (business.businessHours ? JSON.stringify(business.businessHours) : "");
+  const hoursText = hours || "Contact us for our current hours.";
+
   const assistantName = business.assistantName || "IronClaw";
+  const ownerName = business.ownerName || "the owner";
 
-  const systemPrompt = `You are ${assistantName}, the AI assistant for ${business.name}.
+  const systemPrompt = `You are ${assistantName}, the AI assistant for ${business.name}. You work for ${ownerName}.
 
-Business Information:
-- Services: ${services}
-- Business Hours: ${hours}
-${faq ? `\nFrequently Asked Questions:\n${faq}` : ""}
-${business.aiInstructions ? `\nSpecial Instructions:\n${business.aiInstructions}` : ""}
+Your job is to help customers with questions, bookings, and inquiries. Be warm, professional, and knowledgeable. Answer from the business information below — never make up information you don't have.
 
-Your job is to assist customers professionally. Always be helpful, concise, and friendly.
-After your reply, on a new line output JSON: {"category":"inquiry|booking|complaint|spam|other","shouldEscalate":true|false}
-Escalate if: complaint, unclear intent, or if the instructions say so.`;
+## Services & Pricing
+${servicesText}
+
+## Business Hours
+${hoursText}
+${business.address ? `\n## Location\n${business.address}` : ""}
+${business.phone ? `\n## Phone\n${business.phone}` : ""}
+${faq ? `\n## Frequently Asked Questions\n${faq}` : ""}
+${business.aiInstructions ? `\n## Policies & Special Instructions\n${business.aiInstructions}` : ""}
+
+## Response Rules
+- Keep replies concise (2-4 sentences unless more detail is needed)
+- If someone wants to book, confirm availability based on business hours
+- If you don't know something specific, say you'll check with ${ownerName} and get back to them
+- Be conversational and friendly, not robotic
+- After your reply, on a new line output JSON: {"category":"inquiry|booking|complaint|spam|other","shouldEscalate":true|false}
+- Escalate if: complaint, angry customer, unclear intent, or if the instructions say so`;
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
