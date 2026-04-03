@@ -99,7 +99,7 @@ function ConversationItem({
 // Conversation Detail
 // ─────────────────────────────────────────────────────────────
 
-function ConversationDetail({ conversationId }: { conversationId: string }) {
+function ConversationDetail({ conversationId, onBack }: { conversationId: string; onBack?: () => void }) {
   const { toast } = useToast();
   const [replyContent, setReplyContent] = useState("");
 
@@ -155,7 +155,16 @@ function ConversationDetail({ conversationId }: { conversationId: string }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-5 border-b border-border flex items-start justify-between gap-4">
+      <div className="p-4 md:p-5 border-b border-border flex items-start justify-between gap-3">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary flex-shrink-0 mt-0.5"
+          >
+            <ArrowLeft size={18} />
+          </button>
+        )}
         <div>
           <h3 className="font-bold text-base text-foreground">
             {conversation.contactName || conversation.contactEmail || "Unknown"}
@@ -320,18 +329,21 @@ export default function Inbox() {
     <AppLayout>
       <div className="h-full flex flex-col">
         {/* Page header */}
-        <div className="px-7 py-5 border-b border-border flex items-center gap-4">
+        <div className="px-4 md:px-7 py-4 md:py-5 border-b border-border flex items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-xl font-black text-foreground">Inbox</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-lg md:text-xl font-black text-foreground">Inbox</h1>
+            <p className="text-xs md:text-sm text-muted-foreground">
               {conversations?.length ?? 0} conversation{conversations?.length !== 1 ? "s" : ""}
             </p>
           </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Conversation list */}
-          <div className="w-72 flex-shrink-0 border-r border-border flex flex-col">
+          {/* Conversation list — hidden on mobile when a conversation is selected */}
+          <div className={cn(
+            "w-full md:w-72 flex-shrink-0 md:border-r border-border flex flex-col",
+            selectedId ? "hidden md:flex" : "flex"
+          )}>
             {/* Filters */}
             <div className="p-3 space-y-2 border-b border-border">
               <div className="relative">
@@ -400,10 +412,13 @@ export default function Inbox() {
             </div>
           </div>
 
-          {/* Detail panel */}
-          <div className="flex-1 flex overflow-hidden">
+          {/* Detail panel — full width on mobile when a conversation is selected */}
+          <div className={cn(
+            "flex-1 flex overflow-hidden",
+            selectedId ? "flex" : "hidden md:flex"
+          )}>
             {selectedId ? (
-              <ConversationDetail conversationId={selectedId} />
+              <ConversationDetail conversationId={selectedId} onBack={() => setSelectedId(null)} />
             ) : (
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center max-w-xs">
