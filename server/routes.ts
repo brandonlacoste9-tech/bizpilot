@@ -781,7 +781,7 @@ export async function registerRoutes(
         const subject = fields.subject || "(no subject)";
         const text = fields.text || fields.html || "";
 
-        // Extract businessId from "inbox-{uuid}@parse.ironclaw.ca"
+        // Extract businessId from "inbox-{uuid}@ironclaw.ca"
         const toMatch = to.match(/inbox-([a-f0-9-]{36})@/i);
         if (!toMatch) {
           console.warn("[email/inbound] Could not extract businessId from:", to);
@@ -1078,11 +1078,40 @@ export async function registerRoutes(
         const chatId = update.message.chat?.id?.toString();
         const text = (update.message.text || "").trim();
 
-        if (text === "/start") {
-          await sendTelegramMessage(
-            chatId,
-            `🤖 *IronClaw Bot* connected!\n\nYour chat ID is: \`${chatId}\`\n\nUse this ID in your IronClaw settings to link your business.`
-          );
+        if (text === "/start" || text.startsWith("/start ")) {
+          const startParam = text.replace("/start", "").trim();
+
+          if (startParam) {
+            // Deep link: /start {businessId} — auto-link Telegram to business
+            const { supabase } = await import("./storage.js");
+            const { data: bizRow } = await supabase
+              .from("businesses")
+              .select("id, name, telegram_chat_id")
+              .eq("id", startParam)
+              .single();
+
+            if (bizRow) {
+              await supabase
+                .from("businesses")
+                .update({ telegram_chat_id: chatId })
+                .eq("id", bizRow.id);
+              await sendTelegramMessage(
+                chatId,
+                `✅ *Connected!*\n\nYour business *${bizRow.name}* is now linked to this Telegram chat.\n\nYou'll receive notifications here for new emails, phone calls, and escalations.\n\nType /help to see all commands.`
+              );
+            } else {
+              await sendTelegramMessage(
+                chatId,
+                `❌ Could not find that business. Please check the link and try again.\n\nYour chat ID is: \`${chatId}\``
+              );
+            }
+          } else {
+            // Plain /start — show chat ID
+            await sendTelegramMessage(
+              chatId,
+              `🤖 *Welcome to IronClaw!*\n\nYour Telegram Chat ID is:\n\`${chatId}\`\n\nTo connect your business, use the link from your IronClaw dashboard, or paste this Chat ID into Settings.\n\nType /help to see all commands.`
+            );
+          }
         } else if (text === "/help") {
           await sendTelegramMessage(
             chatId,

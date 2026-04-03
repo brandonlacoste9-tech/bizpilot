@@ -187,7 +187,7 @@ export default function Settings() {
   }, [business, form]);
 
   const forwardingAddress = business?.id
-    ? `inbox-${business.id}@parse.ironclaw.ca`
+    ? `inbox-${business.id}@ironclaw.ca`
     : "";
 
   const handleCopyEmail = () => {

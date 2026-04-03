@@ -7,6 +7,7 @@ import {
   Inbox,
   CalendarDays,
   Settings,
+  Plug,
   LogOut,
   Zap,
 } from "lucide-react";
@@ -23,6 +24,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
   { href: "/inbox", label: "Inbox", icon: <Inbox size={18} /> },
   { href: "/calendar", label: "Calendar", icon: <CalendarDays size={18} /> },
+  { href: "/setup", label: "Setup", icon: <Plug size={18} /> },
   { href: "/settings", label: "Settings", icon: <Settings size={18} /> },
 ];
 

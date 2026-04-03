@@ -14,6 +14,7 @@ import Dashboard from "@/pages/Dashboard";
 import Inbox from "@/pages/Inbox";
 import CalendarPage from "@/pages/Calendar";
 import Settings from "@/pages/Settings";
+import Setup from "@/pages/Setup";
 import NotFound from "@/pages/not-found";
 
 // ─────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ import NotFound from "@/pages/not-found";
 // ─────────────────────────────────────────────────────────────
 
 const PUBLIC_ROUTES = ["/", "/login", "/signup"];
-const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/onboarding"];
+const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/setup", "/onboarding"];
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -81,6 +82,7 @@ function AppRouter() {
         <Route path="/inbox" component={Inbox} />
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/settings" component={Settings} />
+        <Route path="/setup" component={Setup} />
         <Route component={NotFound} />
       </Switch>
     </AuthGuard>
