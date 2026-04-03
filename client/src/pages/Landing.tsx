@@ -139,7 +139,12 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative min-h-screen bg-background text-foreground">
+      {/* Single honeycomb layer behind entire page */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <HoneycombBackground variant="hero" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/60 to-background/80" />
+      </div>
       {/* ── Nav ── */}
       <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
@@ -188,8 +193,6 @@ export default function Landing() {
 
       {/* ── Hero ── */}
       <section className="relative overflow-hidden">
-        <HoneycombBackground variant="hero" />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background pointer-events-none" />
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-28 text-center">
@@ -239,8 +242,7 @@ export default function Landing() {
       </section>
 
       {/* ── Features ── */}
-      <section id="features" className="relative py-24 overflow-hidden">
-        <HoneycombBackground variant="section" />
+      <section id="features" className="relative py-24">
         <div className="relative max-w-6xl mx-auto px-6">
         <div className="text-center mb-14">
           <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Features</div>
@@ -278,8 +280,7 @@ export default function Landing() {
       </section>
 
       {/* ── How It Works ── */}
-      <section id="how-it-works" className="relative py-24 bg-card/80 border-y border-border overflow-hidden">
-        <HoneycombBackground variant="section" />
+      <section id="how-it-works" className="relative py-24 bg-card/60 border-y border-border">
         <div className="relative max-w-6xl mx-auto px-6">
           <div className="text-center mb-14">
             <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">How It Works</div>
@@ -323,8 +324,7 @@ export default function Landing() {
       </section>
 
       {/* ── Pricing ── */}
-      <section id="pricing" className="relative py-24 overflow-hidden">
-        <HoneycombBackground variant="section" />
+      <section id="pricing" className="relative py-24">
         <div className="relative max-w-6xl mx-auto px-6">
         <div className="text-center mb-14">
           <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Pricing</div>
@@ -382,8 +382,7 @@ export default function Landing() {
       </section>
 
       {/* ── FAQ ── */}
-      <section id="faq" className="relative py-24 bg-card/80 border-y border-border overflow-hidden">
-        <HoneycombBackground variant="section" />
+      <section id="faq" className="relative py-24 bg-card/60 border-y border-border">
         <div className="relative max-w-3xl mx-auto px-6">
           <div className="text-center mb-14">
             <div className="text-primary text-xs font-bold uppercase tracking-widest mb-3">FAQ</div>
@@ -435,8 +434,7 @@ export default function Landing() {
       </section>
 
       {/* ── Waitlist CTA ── */}
-      <section className="relative py-24 overflow-hidden">
-        <HoneycombBackground variant="section" />
+      <section className="relative py-24">
         <div className="relative max-w-6xl mx-auto px-6 text-center">
         <div className="max-w-2xl mx-auto">
           <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
