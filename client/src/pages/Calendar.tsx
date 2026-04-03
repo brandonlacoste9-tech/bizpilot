@@ -16,108 +16,66 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   CalendarDays,
   Plus,
   Clock,
-  MapPin,
   Trash2,
-  Calendar as CalIcon,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import type { CalendarEvent } from "@shared/schema";
-import { format, parseISO } from "date-fns";
+import {
+  format,
+  parseISO,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  addMonths,
+  subMonths,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  isToday,
+  addHours,
+} from "date-fns";
+import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────
-// Event Card
+// Add Event Dialog
 // ─────────────────────────────────────────────────────────────
 
-function EventCard({
-  event,
-  onDelete,
+function AddEventDialog({
+  open,
+  onOpenChange,
+  defaultDate,
 }: {
-  event: CalendarEvent;
-  onDelete: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  defaultDate?: Date;
 }) {
-  const start = parseISO(event.startTime);
-  const end = parseISO(event.endTime);
-  const isToday = format(start, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
-
-  return (
-    <div
-      data-testid={`event-card-${event.id}`}
-      className={`p-5 rounded-xl border ${
-        isToday ? "border-primary/40 bg-primary/5" : "border-border bg-card"
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          {isToday && (
-            <div className="text-xs font-bold text-primary uppercase tracking-wide mb-1">Today</div>
-          )}
-          <h3 className="font-bold text-base text-foreground mb-1">{event.title}</h3>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-            <CalendarDays size={13} className="flex-shrink-0" />
-            <span>{format(start, "MMMM d, yyyy")}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock size={13} className="flex-shrink-0" />
-            <span>
-              {format(start, "h:mm a")} — {format(end, "h:mm a")}
-            </span>
-          </div>
-          {event.description && (
-            <p className="text-xs text-muted-foreground mt-2">{event.description}</p>
-          )}
-          {event.attendees && event.attendees.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {event.attendees.map((a, i) => (
-                <span key={i} className="text-xs bg-secondary px-2 py-0.5 rounded-full text-muted-foreground">
-                  {a.name || a.email}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-        <Button
-          data-testid={`button-delete-event-${event.id}`}
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground hover:text-destructive flex-shrink-0"
-          onClick={onDelete}
-        >
-          <Trash2 size={15} />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Add Event Form
-// ─────────────────────────────────────────────────────────────
-
-function AddEventDialog({ onAdded }: { onAdded: () => void }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
 
-  // Default to tomorrow
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDate = format(tomorrow, "yyyy-MM-dd'T'HH:mm");
-  const defaultEndDate = format(new Date(tomorrow.getTime() + 60 * 60 * 1000), "yyyy-MM-dd'T'HH:mm");
+  const baseDate = defaultDate || addHours(new Date(), 24);
+  const startStr = format(baseDate, "yyyy-MM-dd") + "T09:00";
+  const endStr = format(baseDate, "yyyy-MM-dd") + "T10:00";
 
   const form = useForm<InsertCalendarEvent>({
     resolver: zodResolver(insertCalendarEventSchema),
     defaultValues: {
       title: "",
       description: "",
-      startTime: defaultDate,
-      endTime: defaultEndDate,
+      startTime: startStr,
+      endTime: endStr,
       status: "confirmed",
     },
   });
+
+  // Reset form when date changes
+  const key = defaultDate?.toISOString() || "default";
 
   const createMutation = useMutation({
     mutationFn: (data: InsertCalendarEvent) =>
@@ -125,9 +83,8 @@ function AddEventDialog({ onAdded }: { onAdded: () => void }) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
       toast({ title: "Event added" });
-      setOpen(false);
+      onOpenChange(false);
       form.reset();
-      onAdded();
     },
     onError: (err: any) => {
       toast({ title: "Failed to add event", description: err.message, variant: "destructive" });
@@ -135,20 +92,15 @@ function AddEventDialog({ onAdded }: { onAdded: () => void }) {
   });
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          data-testid="button-add-event"
-          className="bg-primary text-primary-foreground font-semibold amber-glow hover:bg-primary/90"
-        >
-          <Plus size={16} className="mr-2" /> Add Event
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-card border-border max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base font-bold">Add New Event</DialogTitle>
+          <DialogTitle className="text-base font-bold">
+            {defaultDate ? `Add Event — ${format(defaultDate, "MMMM d, yyyy")}` : "Add New Event"}
+          </DialogTitle>
         </DialogHeader>
         <form
+          key={key}
           onSubmit={form.handleSubmit((data) => createMutation.mutate(data))}
           className="space-y-4 pt-2"
         >
@@ -185,12 +137,10 @@ function AddEventDialog({ onAdded }: { onAdded: () => void }) {
                 id="startTime"
                 data-testid="input-event-start"
                 type="datetime-local"
+                defaultValue={startStr}
                 {...form.register("startTime")}
                 className="bg-background border-border"
               />
-              {form.formState.errors.startTime && (
-                <p className="text-xs text-destructive">{form.formState.errors.startTime.message}</p>
-              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="endTime">End *</Label>
@@ -198,6 +148,7 @@ function AddEventDialog({ onAdded }: { onAdded: () => void }) {
                 id="endTime"
                 data-testid="input-event-end"
                 type="datetime-local"
+                defaultValue={endStr}
                 {...form.register("endTime")}
                 className="bg-background border-border"
               />
@@ -219,12 +170,174 @@ function AddEventDialog({ onAdded }: { onAdded: () => void }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Day cell in calendar grid
+// ─────────────────────────────────────────────────────────────
+
+function DayCell({
+  date,
+  currentMonth,
+  events,
+  selected,
+  onSelect,
+}: {
+  date: Date;
+  currentMonth: Date;
+  events: CalendarEvent[];
+  selected: boolean;
+  onSelect: (date: Date) => void;
+}) {
+  const inMonth = isSameMonth(date, currentMonth);
+  const today = isToday(date);
+  const dayEvents = events.filter((e) => isSameDay(parseISO(e.startTime), date));
+  const hasEvents = dayEvents.length > 0;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(date)}
+      className={cn(
+        "relative flex flex-col items-center justify-start p-1 md:p-2 min-h-[3rem] md:min-h-[5rem] rounded-lg transition-colors text-sm",
+        !inMonth && "opacity-30",
+        today && !selected && "bg-primary/10",
+        selected && "bg-primary/20 ring-1 ring-primary",
+        !today && !selected && inMonth && "hover:bg-secondary/60",
+      )}
+    >
+      <span
+        className={cn(
+          "w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold",
+          today && "bg-primary text-primary-foreground",
+          !today && inMonth && "text-foreground",
+          !today && !inMonth && "text-muted-foreground",
+        )}
+      >
+        {format(date, "d")}
+      </span>
+
+      {/* Event dots / pills */}
+      {hasEvents && (
+        <div className="mt-1 flex flex-col gap-0.5 w-full px-0.5">
+          {dayEvents.slice(0, 2).map((e) => (
+            <div
+              key={e.id}
+              className="hidden md:block text-[10px] leading-tight truncate px-1 py-0.5 rounded bg-primary/15 text-primary font-medium"
+            >
+              {format(parseISO(e.startTime), "h:mma")} {e.title}
+            </div>
+          ))}
+          {/* Mobile: just dots */}
+          <div className="md:hidden flex justify-center gap-0.5 mt-0.5">
+            {dayEvents.slice(0, 3).map((e) => (
+              <div key={e.id} className="w-1.5 h-1.5 rounded-full bg-primary" />
+            ))}
+          </div>
+          {dayEvents.length > 2 && (
+            <div className="hidden md:block text-[10px] text-muted-foreground text-center">
+              +{dayEvents.length - 2} more
+            </div>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Day detail panel (shows events for selected day)
+// ─────────────────────────────────────────────────────────────
+
+function DayDetail({
+  date,
+  events,
+  onDelete,
+  onClose,
+}: {
+  date: Date;
+  events: CalendarEvent[];
+  onDelete: (id: string) => void;
+  onClose: () => void;
+}) {
+  const dayEvents = events
+    .filter((e) => isSameDay(parseISO(e.startTime), date))
+    .sort((a, b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 md:p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="text-sm font-bold text-foreground">
+            {format(date, "EEEE, MMMM d")}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {dayEvents.length} event{dayEvents.length !== 1 ? "s" : ""}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+        >
+          <X size={15} />
+        </button>
+      </div>
+
+      {!dayEvents.length ? (
+        <div className="py-6 text-center text-sm text-muted-foreground">
+          No events on this day. Tap "Add Event" to create one.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {dayEvents.map((e) => (
+            <div
+              key={e.id}
+              className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border"
+            >
+              <div className="w-1 h-full min-h-[2.5rem] rounded-full bg-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm text-foreground">{e.title}</div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                  <Clock size={11} />
+                  {format(parseISO(e.startTime), "h:mm a")} — {format(parseISO(e.endTime), "h:mm a")}
+                </div>
+                {e.description && (
+                  <p className="text-xs text-muted-foreground mt-1">{e.description}</p>
+                )}
+                {e.attendees && e.attendees.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {e.attendees.map((a: any, i: number) => (
+                      <span key={i} className="text-[10px] bg-secondary px-1.5 py-0.5 rounded-full text-muted-foreground">
+                        {a.name || a.email}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive flex-shrink-0 h-7 w-7 p-0"
+                onClick={() => onDelete(e.id)}
+              >
+                <Trash2 size={14} />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Calendar Page
 // ─────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
   const { toast } = useToast();
-  const [, forceUpdate] = useState(0);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogDate, setAddDialogDate] = useState<Date | undefined>(undefined);
 
   const { data: events, isLoading } = useQuery<CalendarEvent[]>({
     queryKey: ["/api/calendar/events"],
@@ -241,61 +354,76 @@ export default function CalendarPage() {
     },
   });
 
-  // Group events by date
-  const grouped: Record<string, CalendarEvent[]> = {};
-  (events || []).forEach((e) => {
-    const dateKey = format(parseISO(e.startTime), "MMMM d, yyyy");
-    if (!grouped[dateKey]) grouped[dateKey] = [];
-    grouped[dateKey].push(e);
-  });
+  // Build calendar grid days
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const calStart = startOfWeek(monthStart, { weekStartsOn: 0 });
+  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
+  const calDays = eachDayOfInterval({ start: calStart, end: calEnd });
 
-  const sortedDates = Object.keys(grouped).sort((a, b) =>
-    new Date(a).getTime() - new Date(b).getTime()
-  );
+  const handleDaySelect = (date: Date) => {
+    setSelectedDate(date);
+  };
 
-  // Upcoming (next 7 days)
+  const handleAddEvent = (date?: Date) => {
+    setAddDialogDate(date || selectedDate || undefined);
+    setAddDialogOpen(true);
+  };
+
+  // Upcoming events (next 7 days)
   const now = new Date();
-  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const upcomingEvents = (events || []).filter((e) => {
-    const start = parseISO(e.startTime);
-    return start >= now && start <= in7Days;
-  });
+  const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const upcoming = (events || [])
+    .filter((e) => {
+      const s = parseISO(e.startTime);
+      return s >= now && s <= in7;
+    })
+    .sort((a, b) => parseISO(a.startTime).getTime() - parseISO(b.startTime).getTime());
 
   return (
     <AppLayout>
-      <div className="p-7 max-w-4xl">
+      <div className="p-4 md:p-7 max-w-5xl">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-black text-foreground">Calendar</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground mt-0.5">
               {events?.length ?? 0} event{events?.length !== 1 ? "s" : ""} scheduled
             </p>
           </div>
-          <AddEventDialog onAdded={() => forceUpdate((n) => n + 1)} />
+          <Button
+            data-testid="button-add-event"
+            onClick={() => handleAddEvent()}
+            className="bg-primary text-primary-foreground font-semibold amber-glow hover:bg-primary/90"
+          >
+            <Plus size={16} className="mr-2" /> Add Event
+          </Button>
         </div>
 
         {/* Upcoming strip */}
-        {upcomingEvents.length > 0 && (
-          <div className="mb-8 p-5 rounded-xl bg-primary/5 border border-primary/20">
+        {upcoming.length > 0 && (
+          <div className="mb-6 p-4 rounded-xl bg-primary/5 border border-primary/20">
             <div className="flex items-center gap-2 mb-3">
               <Clock size={14} className="text-primary" />
-              <span className="text-sm font-bold text-primary">Next 7 days</span>
+              <span className="text-xs font-bold text-primary uppercase tracking-wide">Coming up</span>
             </div>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {upcomingEvents.slice(0, 4).map((e) => (
-                <div key={e.id} className="flex items-center gap-3 text-sm">
-                  <div className="text-center w-10 flex-shrink-0">
-                    <div className="text-lg font-black text-primary leading-none">
+            <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+              {upcoming.slice(0, 5).map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg bg-background/60 border border-border flex-shrink-0 min-w-[180px]"
+                >
+                  <div className="text-center w-9 flex-shrink-0">
+                    <div className="text-base font-black text-primary leading-none">
                       {format(parseISO(e.startTime), "d")}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-[10px] text-muted-foreground uppercase">
                       {format(parseISO(e.startTime), "MMM")}
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-foreground truncate">{e.title}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="font-medium text-xs text-foreground truncate">{e.title}</div>
+                    <div className="text-[10px] text-muted-foreground">
                       {format(parseISO(e.startTime), "h:mm a")}
                     </div>
                   </div>
@@ -305,47 +433,101 @@ export default function CalendarPage() {
           </div>
         )}
 
-        {/* Full event list */}
         {isLoading ? (
           <div className="space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-24 rounded-xl" />
-              </div>
-            ))}
-          </div>
-        ) : !events?.length ? (
-          <div className="py-16 text-center">
-            <CalIcon size={40} className="text-muted-foreground/20 mx-auto mb-3" />
-            <h3 className="font-semibold text-foreground mb-1">No events yet</h3>
-            <p className="text-sm text-muted-foreground">
-              Add your first appointment or event to get started.
-            </p>
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-[400px] rounded-xl" />
           </div>
         ) : (
-          <div className="space-y-8">
-            {sortedDates.map((dateKey) => (
-              <div key={dateKey}>
-                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <div className="h-px flex-1 bg-border" />
-                  {dateKey}
-                  <div className="h-px flex-1 bg-border" />
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Calendar grid */}
+            <div className="lg:col-span-2">
+              <div className="bg-card border border-border rounded-xl overflow-hidden">
+                {/* Month nav */}
+                <div className="flex items-center justify-between px-4 md:px-5 py-3 border-b border-border">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div className="text-sm font-bold text-foreground">
+                    {format(currentMonth, "MMMM yyyy")}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
                 </div>
-                <div className="space-y-3">
-                  {grouped[dateKey].map((e) => (
-                    <EventCard
-                      key={e.id}
-                      event={e}
-                      onDelete={() => deleteMutation.mutate(e.id)}
+
+                {/* Day of week headers */}
+                <div className="grid grid-cols-7 border-b border-border">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                    <div key={d} className="text-center text-[10px] md:text-xs font-semibold text-muted-foreground py-2 uppercase tracking-wide">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Day grid */}
+                <div className="grid grid-cols-7">
+                  {calDays.map((day) => (
+                    <DayCell
+                      key={day.toISOString()}
+                      date={day}
+                      currentMonth={currentMonth}
+                      events={events || []}
+                      selected={!!selectedDate && isSameDay(day, selectedDate)}
+                      onSelect={handleDaySelect}
                     />
                   ))}
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Right panel: day detail */}
+            <div className="lg:col-span-1">
+              {selectedDate ? (
+                <div className="space-y-3">
+                  <DayDetail
+                    date={selectedDate}
+                    events={events || []}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                    onClose={() => setSelectedDate(null)}
+                  />
+                  <Button
+                    onClick={() => handleAddEvent(selectedDate)}
+                    variant="outline"
+                    className="w-full border-border text-sm"
+                  >
+                    <Plus size={14} className="mr-2" />
+                    Add event on {format(selectedDate, "MMM d")}
+                  </Button>
+                </div>
+              ) : (
+                <div className="bg-card border border-border rounded-xl p-6 text-center">
+                  <CalendarDays size={32} className="text-muted-foreground/20 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">Tap a day to see events</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Or tap "Add Event" to create one.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {/* Add Event Dialog */}
+      <AddEventDialog
+        open={addDialogOpen}
+        onOpenChange={setAddDialogOpen}
+        defaultDate={addDialogDate}
+      />
     </AppLayout>
   );
 }
