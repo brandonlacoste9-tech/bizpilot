@@ -133,8 +133,26 @@ export default function Onboarding() {
     },
   });
 
-  const handleStep1 = form1.handleSubmit((data) => {
+  const [quickStartDone, setQuickStartDone] = useState(false);
+
+  const handleStep1 = form1.handleSubmit(async (data) => {
     setStep1Data(data);
+
+    // Silently create account if not already logged in
+    if (!quickStartDone) {
+      try {
+        await apiRequest("POST", "/api/auth/quick-start", {
+          email: data.email,
+          fullName: data.ownerName,
+        });
+        await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+        setQuickStartDone(true);
+      } catch (err: any) {
+        // If it fails (e.g. network error), still let them continue
+        console.warn("Quick-start failed, continuing:", err.message);
+      }
+    }
+
     setStep(1);
   });
 

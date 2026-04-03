@@ -173,7 +173,7 @@ export default function Landing() {
                 Sign in
               </Button>
             </Link>
-            <Link href="/signup">
+            <Link href="/onboarding">
               <Button
                 size="sm"
                 data-testid="link-signup"
@@ -211,7 +211,7 @@ export default function Landing() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/signup">
+            <Link href="/onboarding">
               <Button
                 size="lg"
                 data-testid="button-hero-cta"
@@ -471,7 +471,7 @@ export default function Landing() {
               {waitlistMutation.isPending ? "Joining..." : "Join Waitlist"}
             </Button>
           </div>
-          <p className="text-muted-foreground text-xs mt-4">Or just <Link href="/signup"><span className="text-primary hover:underline cursor-pointer">create an account now →</span></Link></p>
+          <p className="text-muted-foreground text-xs mt-4">Or just <Link href="/onboarding"><span className="text-primary hover:underline cursor-pointer">get started now →</span></Link></p>
         </div>
         </div>
       </section>

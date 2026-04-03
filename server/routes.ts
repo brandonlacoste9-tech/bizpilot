@@ -284,6 +284,71 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/auth/quick-start
+  // Frictionless free tier: creates account silently with email only.
+  // Password is set to a random hash — user sets a real one when they upgrade.
+  app.post("/api/auth/quick-start", async (req: Request, res: Response) => {
+    try {
+      const { email, fullName } = req.body;
+      if (!email || typeof email !== "string" || !email.includes("@")) {
+        return res.status(400).json({ message: "Valid email is required" });
+      }
+
+      // Check if already exists — if so, log them in
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        const token = jwt.sign({ userId: existing.id }, JWT_SECRET, { expiresIn: "7d" });
+        res.cookie("ironclaw_token", token, COOKIE_OPTIONS);
+        return res.status(200).json({
+          user: { id: existing.id, email: existing.email, fullName: existing.fullName },
+          existing: true,
+        });
+      }
+
+      // Create with random password (user will set one on upgrade)
+      const tempPassword = crypto.randomBytes(32).toString("hex");
+      const passwordHash = await bcrypt.hash(tempPassword, 12);
+      const user = await storage.createUser(email, passwordHash, fullName || "Business Owner");
+
+      // Create free subscription
+      await storage.createSubscription(user.id, "free");
+
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+      res.cookie("ironclaw_token", token, COOKIE_OPTIONS);
+
+      return res.status(201).json({
+        user: { id: user.id, email: user.email, fullName: user.fullName },
+        existing: false,
+      });
+    } catch (err: any) {
+      console.error("Quick-start error:", err);
+      return res.status(500).json({ message: err.message || "Quick start failed" });
+    }
+  });
+
+  // POST /api/auth/set-password
+  // Called when free user upgrades — lets them set a password for future logins
+  app.post("/api/auth/set-password", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { password } = req.body;
+      if (!password || typeof password !== "string" || password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const { supabase } = await import("./storage.js");
+      await supabase
+        .from("users")
+        .update({ password_hash: passwordHash })
+        .eq("id", req.userId);
+
+      return res.json({ message: "Password set successfully" });
+    } catch (err: any) {
+      console.error("Set password error:", err);
+      return res.status(500).json({ message: err.message || "Failed to set password" });
+    }
+  });
+
   // POST /api/auth/login
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
@@ -330,11 +395,19 @@ export async function registerRoutes(
       const subscription = await storage.getSubscriptionByUserId(user.id);
       const business = await storage.getBusinessByUserId(user.id);
 
+      // Check if at plan limit
+      let atLimit = false;
+      if (business) {
+        const planCheck = await checkPlanLimits(business.id, subscription?.plan || "free");
+        atLimit = !planCheck.allowed;
+      }
+
       return res.json({
         user: { id: user.id, email: user.email, fullName: user.fullName },
         subscription,
         business,
         hasCompletedOnboarding: !!business,
+        atLimit,
       });
     } catch (err: any) {
       return res.status(500).json({ message: "Failed to fetch user" });

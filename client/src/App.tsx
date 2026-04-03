@@ -16,13 +16,14 @@ import CalendarPage from "@/pages/Calendar";
 import Settings from "@/pages/Settings";
 import Setup from "@/pages/Setup";
 import NotFound from "@/pages/not-found";
+import { UpgradeWall } from "@/components/UpgradeWall";
 
 // ─────────────────────────────────────────────────────────────
 // Auth guard
 // ─────────────────────────────────────────────────────────────
 
-const PUBLIC_ROUTES = ["/", "/login", "/signup"];
-const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/setup", "/onboarding"];
+const PUBLIC_ROUTES = ["/", "/login", "/signup", "/onboarding"];
+const APP_ROUTES = ["/dashboard", "/inbox", "/calendar", "/settings", "/setup"];
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -58,9 +59,16 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return <Redirect to="/dashboard" />;
   }
 
-  // Unauthenticated user on app page → send to login
+  // Unauthenticated user on app page → send to onboarding (not login)
   if (!isAuthenticated && isAppRoute) {
-    return <Redirect to="/login" />;
+    return <Redirect to="/onboarding" />;
+  }
+
+  // Free user at limit → show upgrade wall (except on settings so they can manage account)
+  const atLimit = authData?.atLimit === true;
+  const plan = authData?.subscription?.plan || "free";
+  if (atLimit && plan === "free" && isAppRoute && location !== "/settings") {
+    return <UpgradeWall />;
   }
 
   return <>{children}</>;
