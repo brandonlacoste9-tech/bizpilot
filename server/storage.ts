@@ -1,242 +1,384 @@
-import {
-  type Business, type InsertBusiness, businesses,
-  type Conversation, type InsertConversation, conversations,
-  type Message, type InsertMessage, messages,
-  type CalendarEvent, type InsertCalendarEvent, calendarEvents,
-  type ActivityLog, type InsertActivityLog, activityLog,
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type {
+  Business, InsertBusiness,
+  Conversation, InsertConversation,
+  Message, InsertMessage,
+  CalendarEvent, InsertCalendarEvent,
+  ActivityLog, InsertActivityLog,
 } from "@shared/schema";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 
-const sqlite = new Database("data.db");
-sqlite.pragma("journal_mode = WAL");
+// ── Supabase client ──────────────────────────────────────────
 
-// Create tables if they don't exist
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS businesses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    owner_name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    phone TEXT,
-    address TEXT,
-    business_hours TEXT,
-    services TEXT,
-    faq_entries TEXT,
-    telegram_chat_id TEXT,
-    timezone TEXT DEFAULT 'America/Toronto',
-    ai_instructions TEXT,
-    is_active INTEGER DEFAULT 1
-  );
-  CREATE TABLE IF NOT EXISTS conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    business_id INTEGER NOT NULL,
-    source TEXT NOT NULL,
-    external_id TEXT,
-    contact_name TEXT,
-    contact_email TEXT,
-    contact_phone TEXT,
-    subject TEXT,
-    status TEXT NOT NULL DEFAULT 'new',
-    category TEXT,
-    summary TEXT,
-    ai_response TEXT,
-    owner_action TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS calendar_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    business_id INTEGER NOT NULL,
-    external_id TEXT,
-    title TEXT NOT NULL,
-    description TEXT,
-    start_time TEXT NOT NULL,
-    end_time TEXT NOT NULL,
-    attendees TEXT,
-    status TEXT DEFAULT 'confirmed'
-  );
-  CREATE TABLE IF NOT EXISTS activity_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    business_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    description TEXT,
-    metadata TEXT,
-    created_at TEXT NOT NULL
-  );
-`);
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
 
-export const db = drizzle(sqlite);
+// ── Row ↔ Model mappers (snake_case ↔ camelCase) ────────────
 
-export interface IStorage {
-  // Business
-  getBusiness(): Business | undefined;
-  createBusiness(data: InsertBusiness): Business;
-  updateBusiness(id: number, data: Partial<InsertBusiness>): Business | undefined;
-
-  // Conversations
-  listConversations(filters?: { status?: string; category?: string }): Conversation[];
-  getConversation(id: number): Conversation | undefined;
-  createConversation(data: InsertConversation): Conversation;
-  updateConversation(id: number, data: Partial<InsertConversation>): Conversation | undefined;
-
-  // Messages
-  listMessages(conversationId: number): Message[];
-  createMessage(data: InsertMessage): Message;
-
-  // Calendar events
-  listCalendarEvents(startDate?: string, endDate?: string): CalendarEvent[];
-  createCalendarEvent(data: InsertCalendarEvent): CalendarEvent;
-  updateCalendarEvent(id: number, data: Partial<InsertCalendarEvent>): CalendarEvent | undefined;
-  deleteCalendarEvent(id: number): void;
-
-  // Activity log
-  listActivity(limit?: number): ActivityLog[];
-  createActivity(data: InsertActivityLog): ActivityLog;
-
-  // Stats
-  getStats(): {
-    totalConversations: number;
-    newConversations: number;
-    autoReplied: number;
-    escalated: number;
-    upcomingAppointments: number;
+function rowToBusiness(r: any): Business {
+  return {
+    id: r.id,
+    name: r.name,
+    ownerName: r.owner_name,
+    email: r.email,
+    phone: r.phone,
+    address: r.address,
+    businessHours: r.business_hours,
+    services: r.services,
+    faqEntries: r.faq_entries,
+    telegramChatId: r.telegram_chat_id,
+    timezone: r.timezone,
+    aiInstructions: r.ai_instructions,
+    isActive: r.is_active,
   };
 }
 
-export class DatabaseStorage implements IStorage {
-  getBusiness(): Business | undefined {
-    return db.select().from(businesses).limit(1).get();
-  }
+function businessToRow(d: Partial<InsertBusiness>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (d.name !== undefined) row.name = d.name;
+  if (d.ownerName !== undefined) row.owner_name = d.ownerName;
+  if (d.email !== undefined) row.email = d.email;
+  if (d.phone !== undefined) row.phone = d.phone;
+  if (d.address !== undefined) row.address = d.address;
+  if (d.businessHours !== undefined) row.business_hours = d.businessHours;
+  if (d.services !== undefined) row.services = d.services;
+  if (d.faqEntries !== undefined) row.faq_entries = d.faqEntries;
+  if (d.telegramChatId !== undefined) row.telegram_chat_id = d.telegramChatId;
+  if (d.timezone !== undefined) row.timezone = d.timezone;
+  if (d.aiInstructions !== undefined) row.ai_instructions = d.aiInstructions;
+  if (d.isActive !== undefined) row.is_active = d.isActive;
+  return row;
+}
 
-  createBusiness(data: InsertBusiness): Business {
-    return db.insert(businesses).values(data).returning().get();
-  }
+function rowToConversation(r: any): Conversation {
+  return {
+    id: r.id,
+    businessId: r.business_id,
+    source: r.source,
+    externalId: r.external_id,
+    contactName: r.contact_name,
+    contactEmail: r.contact_email,
+    contactPhone: r.contact_phone,
+    subject: r.subject,
+    status: r.status,
+    category: r.category,
+    summary: r.summary,
+    aiResponse: r.ai_response,
+    ownerAction: r.owner_action,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
 
-  updateBusiness(id: number, data: Partial<InsertBusiness>): Business | undefined {
-    return db.update(businesses).set(data).where(eq(businesses.id, id)).returning().get();
-  }
+function conversationToRow(d: Partial<InsertConversation>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (d.businessId !== undefined) row.business_id = d.businessId;
+  if (d.source !== undefined) row.source = d.source;
+  if (d.externalId !== undefined) row.external_id = d.externalId;
+  if (d.contactName !== undefined) row.contact_name = d.contactName;
+  if (d.contactEmail !== undefined) row.contact_email = d.contactEmail;
+  if (d.contactPhone !== undefined) row.contact_phone = d.contactPhone;
+  if (d.subject !== undefined) row.subject = d.subject;
+  if (d.status !== undefined) row.status = d.status;
+  if (d.category !== undefined) row.category = d.category;
+  if (d.summary !== undefined) row.summary = d.summary;
+  if (d.aiResponse !== undefined) row.ai_response = d.aiResponse;
+  if (d.ownerAction !== undefined) row.owner_action = d.ownerAction;
+  if (d.createdAt !== undefined) row.created_at = d.createdAt;
+  if (d.updatedAt !== undefined) row.updated_at = d.updatedAt;
+  return row;
+}
 
-  listConversations(filters?: { status?: string; category?: string }): Conversation[] {
-    let query = db.select().from(conversations);
-    const conditions = [];
-    if (filters?.status) {
-      conditions.push(eq(conversations.status, filters.status));
-    }
-    if (filters?.category) {
-      conditions.push(eq(conversations.category, filters.category));
-    }
-    if (conditions.length > 0) {
-      return query.where(and(...conditions)).orderBy(desc(conversations.createdAt)).all();
-    }
-    return query.orderBy(desc(conversations.createdAt)).all();
-  }
+function rowToMessage(r: any): Message {
+  return {
+    id: r.id,
+    conversationId: r.conversation_id,
+    role: r.role,
+    content: r.content,
+    createdAt: r.created_at,
+  };
+}
 
-  getConversation(id: number): Conversation | undefined {
-    return db.select().from(conversations).where(eq(conversations.id, id)).get();
-  }
+function messageToRow(d: InsertMessage): Record<string, any> {
+  return {
+    conversation_id: d.conversationId,
+    role: d.role,
+    content: d.content,
+    created_at: d.createdAt,
+  };
+}
 
-  createConversation(data: InsertConversation): Conversation {
-    return db.insert(conversations).values(data).returning().get();
-  }
+function rowToCalendarEvent(r: any): CalendarEvent {
+  return {
+    id: r.id,
+    businessId: r.business_id,
+    externalId: r.external_id,
+    title: r.title,
+    description: r.description,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    attendees: r.attendees,
+    status: r.status,
+  };
+}
 
-  updateConversation(id: number, data: Partial<InsertConversation>): Conversation | undefined {
-    return db.update(conversations).set({
-      ...data,
-      updatedAt: new Date().toISOString(),
-    }).where(eq(conversations.id, id)).returning().get();
-  }
+function calendarEventToRow(d: Partial<InsertCalendarEvent>): Record<string, any> {
+  const row: Record<string, any> = {};
+  if (d.businessId !== undefined) row.business_id = d.businessId;
+  if (d.externalId !== undefined) row.external_id = d.externalId;
+  if (d.title !== undefined) row.title = d.title;
+  if (d.description !== undefined) row.description = d.description;
+  if (d.startTime !== undefined) row.start_time = d.startTime;
+  if (d.endTime !== undefined) row.end_time = d.endTime;
+  if (d.attendees !== undefined) row.attendees = d.attendees;
+  if (d.status !== undefined) row.status = d.status;
+  return row;
+}
 
-  listMessages(conversationId: number): Message[] {
-    return db.select().from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(messages.createdAt)
-      .all();
-  }
+function rowToActivityLog(r: any): ActivityLog {
+  return {
+    id: r.id,
+    businessId: r.business_id,
+    type: r.type,
+    title: r.title,
+    description: r.description,
+    metadata: r.metadata,
+    createdAt: r.created_at,
+  };
+}
 
-  createMessage(data: InsertMessage): Message {
-    return db.insert(messages).values(data).returning().get();
-  }
+function activityLogToRow(d: InsertActivityLog): Record<string, any> {
+  return {
+    business_id: d.businessId,
+    type: d.type,
+    title: d.title,
+    description: d.description ?? null,
+    metadata: d.metadata ?? null,
+    created_at: d.createdAt,
+  };
+}
 
-  listCalendarEvents(startDate?: string, endDate?: string): CalendarEvent[] {
-    const conditions = [];
-    if (startDate) {
-      conditions.push(gte(calendarEvents.startTime, startDate));
-    }
-    if (endDate) {
-      conditions.push(lte(calendarEvents.startTime, endDate));
-    }
-    if (conditions.length > 0) {
-      return db.select().from(calendarEvents).where(and(...conditions)).orderBy(calendarEvents.startTime).all();
-    }
-    return db.select().from(calendarEvents).orderBy(calendarEvents.startTime).all();
-  }
+// ── Async Storage Interface ──────────────────────────────────
 
-  createCalendarEvent(data: InsertCalendarEvent): CalendarEvent {
-    return db.insert(calendarEvents).values(data).returning().get();
-  }
+export interface IStorage {
+  getBusiness(): Promise<Business | undefined>;
+  createBusiness(data: InsertBusiness): Promise<Business>;
+  updateBusiness(id: number, data: Partial<InsertBusiness>): Promise<Business | undefined>;
 
-  updateCalendarEvent(id: number, data: Partial<InsertCalendarEvent>): CalendarEvent | undefined {
-    return db.update(calendarEvents).set(data).where(eq(calendarEvents.id, id)).returning().get();
-  }
+  listConversations(filters?: { status?: string; category?: string }): Promise<Conversation[]>;
+  getConversation(id: number): Promise<Conversation | undefined>;
+  createConversation(data: InsertConversation): Promise<Conversation>;
+  updateConversation(id: number, data: Partial<InsertConversation>): Promise<Conversation | undefined>;
 
-  deleteCalendarEvent(id: number): void {
-    db.delete(calendarEvents).where(eq(calendarEvents.id, id)).run();
-  }
+  listMessages(conversationId: number): Promise<Message[]>;
+  createMessage(data: InsertMessage): Promise<Message>;
 
-  listActivity(limit: number = 20): ActivityLog[] {
-    return db.select().from(activityLog).orderBy(desc(activityLog.createdAt)).limit(limit).all();
-  }
+  listCalendarEvents(startDate?: string, endDate?: string): Promise<CalendarEvent[]>;
+  createCalendarEvent(data: InsertCalendarEvent): Promise<CalendarEvent>;
+  updateCalendarEvent(id: number, data: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined>;
+  deleteCalendarEvent(id: number): Promise<void>;
 
-  createActivity(data: InsertActivityLog): ActivityLog {
-    return db.insert(activityLog).values(data).returning().get();
-  }
+  listActivity(limit?: number): Promise<ActivityLog[]>;
+  createActivity(data: InsertActivityLog): Promise<ActivityLog>;
 
-  getStats(): {
+  getStats(): Promise<{
     totalConversations: number;
     newConversations: number;
     autoReplied: number;
     escalated: number;
     upcomingAppointments: number;
-  } {
+  }>;
+}
+
+// ── Supabase Storage Implementation ──────────────────────────
+
+export class SupabaseStorage implements IStorage {
+  async getBusiness(): Promise<Business | undefined> {
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return undefined;
+    return rowToBusiness(data);
+  }
+
+  async createBusiness(d: InsertBusiness): Promise<Business> {
+    const { data, error } = await supabase
+      .from("businesses")
+      .insert(businessToRow(d))
+      .select()
+      .single();
+    if (error) throw new Error(`createBusiness: ${error.message}`);
+    return rowToBusiness(data);
+  }
+
+  async updateBusiness(id: number, d: Partial<InsertBusiness>): Promise<Business | undefined> {
+    const { data, error } = await supabase
+      .from("businesses")
+      .update(businessToRow(d))
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+    if (error || !data) return undefined;
+    return rowToBusiness(data);
+  }
+
+  async listConversations(filters?: { status?: string; category?: string }): Promise<Conversation[]> {
+    let query = supabase.from("conversations").select("*");
+    if (filters?.status) query = query.eq("status", filters.status);
+    if (filters?.category) query = query.eq("category", filters.category);
+    query = query.order("created_at", { ascending: false });
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data.map(rowToConversation);
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    const { data, error } = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return undefined;
+    return rowToConversation(data);
+  }
+
+  async createConversation(d: InsertConversation): Promise<Conversation> {
+    const { data, error } = await supabase
+      .from("conversations")
+      .insert(conversationToRow(d))
+      .select()
+      .single();
+    if (error) throw new Error(`createConversation: ${error.message}`);
+    return rowToConversation(data);
+  }
+
+  async updateConversation(id: number, d: Partial<InsertConversation>): Promise<Conversation | undefined> {
+    const row = conversationToRow({ ...d, updatedAt: new Date().toISOString() });
+    const { data, error } = await supabase
+      .from("conversations")
+      .update(row)
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+    if (error || !data) return undefined;
+    return rowToConversation(data);
+  }
+
+  async listMessages(conversationId: number): Promise<Message[]> {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true });
+    if (error || !data) return [];
+    return data.map(rowToMessage);
+  }
+
+  async createMessage(d: InsertMessage): Promise<Message> {
+    const { data, error } = await supabase
+      .from("messages")
+      .insert(messageToRow(d))
+      .select()
+      .single();
+    if (error) throw new Error(`createMessage: ${error.message}`);
+    return rowToMessage(data);
+  }
+
+  async listCalendarEvents(startDate?: string, endDate?: string): Promise<CalendarEvent[]> {
+    let query = supabase.from("calendar_events").select("*");
+    if (startDate) query = query.gte("start_time", startDate);
+    if (endDate) query = query.lte("start_time", endDate);
+    query = query.order("start_time", { ascending: true });
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data.map(rowToCalendarEvent);
+  }
+
+  async createCalendarEvent(d: InsertCalendarEvent): Promise<CalendarEvent> {
+    const { data, error } = await supabase
+      .from("calendar_events")
+      .insert(calendarEventToRow(d))
+      .select()
+      .single();
+    if (error) throw new Error(`createCalendarEvent: ${error.message}`);
+    return rowToCalendarEvent(data);
+  }
+
+  async updateCalendarEvent(id: number, d: Partial<InsertCalendarEvent>): Promise<CalendarEvent | undefined> {
+    const { data, error } = await supabase
+      .from("calendar_events")
+      .update(calendarEventToRow(d))
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+    if (error || !data) return undefined;
+    return rowToCalendarEvent(data);
+  }
+
+  async deleteCalendarEvent(id: number): Promise<void> {
+    await supabase.from("calendar_events").delete().eq("id", id);
+  }
+
+  async listActivity(limit: number = 20): Promise<ActivityLog[]> {
+    const { data, error } = await supabase
+      .from("activity_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return data.map(rowToActivityLog);
+  }
+
+  async createActivity(d: InsertActivityLog): Promise<ActivityLog> {
+    const { data, error } = await supabase
+      .from("activity_log")
+      .insert(activityLogToRow(d))
+      .select()
+      .single();
+    if (error) throw new Error(`createActivity: ${error.message}`);
+    return rowToActivityLog(data);
+  }
+
+  async getStats(): Promise<{
+    totalConversations: number;
+    newConversations: number;
+    autoReplied: number;
+    escalated: number;
+    upcomingAppointments: number;
+  }> {
     const today = new Date().toISOString().split("T")[0];
-    const total = db.select({ count: sql<number>`count(*)` }).from(conversations).get();
-    const newC = db.select({ count: sql<number>`count(*)` }).from(conversations).where(eq(conversations.status, "new")).get();
-    const auto = db.select({ count: sql<number>`count(*)` }).from(conversations).where(eq(conversations.status, "auto_replied")).get();
-    const esc = db.select({ count: sql<number>`count(*)` }).from(conversations).where(eq(conversations.status, "escalated")).get();
-    const upcoming = db.select({ count: sql<number>`count(*)` }).from(calendarEvents).where(gte(calendarEvents.startTime, today)).get();
+
+    const [total, newC, auto, esc, upcoming] = await Promise.all([
+      supabase.from("conversations").select("*", { count: "exact", head: true }),
+      supabase.from("conversations").select("*", { count: "exact", head: true }).eq("status", "new"),
+      supabase.from("conversations").select("*", { count: "exact", head: true }).eq("status", "auto_replied"),
+      supabase.from("conversations").select("*", { count: "exact", head: true }).eq("status", "escalated"),
+      supabase.from("calendar_events").select("*", { count: "exact", head: true }).gte("start_time", today),
+    ]);
 
     return {
-      totalConversations: total?.count ?? 0,
-      newConversations: newC?.count ?? 0,
-      autoReplied: auto?.count ?? 0,
-      escalated: esc?.count ?? 0,
-      upcomingAppointments: upcoming?.count ?? 0,
+      totalConversations: total.count ?? 0,
+      newConversations: newC.count ?? 0,
+      autoReplied: auto.count ?? 0,
+      escalated: esc.count ?? 0,
+      upcomingAppointments: upcoming.count ?? 0,
     };
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage: IStorage = new SupabaseStorage();
 
-// Seed data function
-export function seedDatabase() {
-  const existingBusiness = storage.getBusiness();
+// ── Seed data function ───────────────────────────────────────
+
+export async function seedDatabase() {
+  const existingBusiness = await storage.getBusiness();
   if (existingBusiness) return; // Already seeded
 
   const now = new Date();
-  const today = now.toISOString();
 
-  // Create demo business
-  const biz = storage.createBusiness({
+  const biz = await storage.createBusiness({
     name: "Bright Spark Electric",
     ownerName: "Marcus Thompson",
     email: "marcus@brightsparkelectric.com",
@@ -350,27 +492,26 @@ export function seedDatabase() {
     },
   ];
 
-  convos.forEach((c) => {
-    const conv = storage.createConversation(c);
-    // Add messages for each conversation
+  for (const c of convos) {
+    const conv = await storage.createConversation(c);
     if (c.contactName === "Sarah Chen") {
-      storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hi, I recently bought a Tesla Model Y and I'm looking to get a Level 2 EV charger installed at home. My house has a 200A panel. Could you give me a quote?", createdAt: c.createdAt });
-      storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 5 * 60 * 1000).toISOString() });
+      await storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hi, I recently bought a Tesla Model Y and I'm looking to get a Level 2 EV charger installed at home. My house has a 200A panel. Could you give me a quote?", createdAt: c.createdAt });
+      await storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 5 * 60 * 1000).toISOString() });
     } else if (c.contactName === "David Park") {
-      storage.createMessage({ conversationId: conv.id, role: "customer", content: "I'm an interior designer working on a restaurant renovation in Liberty Village. We need to retrofit all the lighting — about 2,500 sq ft. Budget is around $15K. Can you start within 2 weeks?", createdAt: c.createdAt });
-      storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 3 * 60 * 1000).toISOString() });
+      await storage.createMessage({ conversationId: conv.id, role: "customer", content: "I'm an interior designer working on a restaurant renovation in Liberty Village. We need to retrofit all the lighting — about 2,500 sq ft. Budget is around $15K. Can you start within 2 weeks?", createdAt: c.createdAt });
+      await storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 3 * 60 * 1000).toISOString() });
     } else if (c.contactName === "Lisa Wong") {
-      storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hi, my kitchen lights started flickering after the storm last night. It's happening in all three fixtures. Should I be worried?", createdAt: c.createdAt });
+      await storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hi, my kitchen lights started flickering after the storm last night. It's happening in all three fixtures. Should I be worried?", createdAt: c.createdAt });
     } else if (c.contactName === "James Miller") {
-      storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hey, just confirming the Tuesday 9 AM appointment for the panel upgrade. We'll have the basement cleared.", createdAt: c.createdAt });
-      storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 2 * 60 * 1000).toISOString() });
+      await storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hey, just confirming the Tuesday 9 AM appointment for the panel upgrade. We'll have the basement cleared.", createdAt: c.createdAt });
+      await storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 2 * 60 * 1000).toISOString() });
     } else if (c.contactName === "Mike Johnson") {
-      storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hi there, I just bought a hot tub and need a dedicated 240V line run to my backyard. House was built in 2005. What would this cost?", createdAt: c.createdAt });
-      storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 4 * 60 * 1000).toISOString() });
+      await storage.createMessage({ conversationId: conv.id, role: "customer", content: "Hi there, I just bought a hot tub and need a dedicated 240V line run to my backyard. House was built in 2005. What would this cost?", createdAt: c.createdAt });
+      await storage.createMessage({ conversationId: conv.id, role: "ai", content: c.aiResponse!, createdAt: new Date(new Date(c.createdAt).getTime() + 4 * 60 * 1000).toISOString() });
     }
-  });
+  }
 
-  // Seed calendar events — use explicit date strings for consistent display
+  // Seed calendar events
   const todayStr = now.toISOString().split("T")[0];
   const tomorrowDate = new Date(now);
   tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -382,7 +523,7 @@ export function seedDatabase() {
   nextWeekDate.setDate(nextWeekDate.getDate() + 5);
   const nextWeekStr = nextWeekDate.toISOString().split("T")[0];
 
-  storage.createCalendarEvent({
+  await storage.createCalendarEvent({
     businessId: biz.id,
     title: "EV Charger Assessment — Sarah Chen",
     description: "On-site assessment for Level 2 EV charger installation. 200A panel. Tesla Model Y.",
@@ -392,7 +533,7 @@ export function seedDatabase() {
     status: "confirmed",
   });
 
-  storage.createCalendarEvent({
+  await storage.createCalendarEvent({
     businessId: biz.id,
     title: "Panel Upgrade — James Miller",
     description: "200A panel upgrade. Crew: Marcus + Dave. Basement access confirmed.",
@@ -402,7 +543,7 @@ export function seedDatabase() {
     status: "confirmed",
   });
 
-  storage.createCalendarEvent({
+  await storage.createCalendarEvent({
     businessId: biz.id,
     title: "Restaurant Lighting Walkthrough — David Park",
     description: "Initial walkthrough for lighting retrofit. Liberty Village restaurant.",
@@ -458,7 +599,9 @@ export function seedDatabase() {
     },
   ];
 
-  activities.forEach((a) => storage.createActivity(a));
+  for (const a of activities) {
+    await storage.createActivity(a);
+  }
 
   console.log("Database seeded with demo data.");
 }

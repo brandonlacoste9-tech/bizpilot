@@ -4,7 +4,7 @@ import { storage, seedDatabase } from "./storage";
 import { insertBusinessSchema, insertConversationSchema, insertMessageSchema, insertCalendarEventSchema } from "@shared/schema";
 
 // ── Telegram Bot Config ─────────────────────────────────
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8742735228:AAEgtHawWmQKFzt66lknioB2XI6DzNad4UI";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 
 async function sendTelegramMessage(chatId: string, text: string, parseMode: string = "HTML") {
@@ -93,30 +93,30 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Seed on startup
-  seedDatabase();
+  // Seed on startup (async now)
+  await seedDatabase();
 
   // ── Business ──────────────────────────────────────────
-  app.get("/api/business", (_req, res) => {
-    const business = storage.getBusiness();
+  app.get("/api/business", async (_req, res) => {
+    const business = await storage.getBusiness();
     if (!business) {
       return res.status(404).json({ message: "No business profile found" });
     }
     res.json(business);
   });
 
-  app.post("/api/business", (req, res) => {
+  app.post("/api/business", async (req, res) => {
     const parsed = insertBusinessSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.issues });
     }
-    const business = storage.createBusiness(parsed.data);
+    const business = await storage.createBusiness(parsed.data);
     res.status(201).json(business);
   });
 
-  app.patch("/api/business/:id", (req, res) => {
+  app.patch("/api/business/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const business = storage.updateBusiness(id, req.body);
+    const business = await storage.updateBusiness(id, req.body);
     if (!business) {
       return res.status(404).json({ message: "Business not found" });
     }
@@ -124,47 +124,47 @@ export async function registerRoutes(
   });
 
   // ── Conversations ─────────────────────────────────────
-  app.get("/api/conversations", (req, res) => {
+  app.get("/api/conversations", async (req, res) => {
     const filters: { status?: string; category?: string } = {};
     if (typeof req.query.status === "string") filters.status = req.query.status;
     if (typeof req.query.category === "string") filters.category = req.query.category;
-    const convos = storage.listConversations(Object.keys(filters).length > 0 ? filters : undefined);
+    const convos = await storage.listConversations(Object.keys(filters).length > 0 ? filters : undefined);
     res.json(convos);
   });
 
-  app.get("/api/conversations/:id", (req, res) => {
+  app.get("/api/conversations/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const conversation = storage.getConversation(id);
+    const conversation = await storage.getConversation(id);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
-    const msgs = storage.listMessages(id);
+    const msgs = await storage.listMessages(id);
     res.json({ ...conversation, messages: msgs });
   });
 
-  app.patch("/api/conversations/:id", (req, res) => {
+  app.patch("/api/conversations/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const conversation = storage.updateConversation(id, req.body);
+    const conversation = await storage.updateConversation(id, req.body);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
     res.json(conversation);
   });
 
-  app.post("/api/conversations/:id/reply", (req, res) => {
+  app.post("/api/conversations/:id/reply", async (req, res) => {
     const id = parseInt(req.params.id);
-    const conversation = storage.getConversation(id);
+    const conversation = await storage.getConversation(id);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
-    const message = storage.createMessage({
+    const message = await storage.createMessage({
       conversationId: id,
       role: "owner",
       content: req.body.content,
       createdAt: new Date().toISOString(),
     });
-    storage.updateConversation(id, { status: "resolved", ownerAction: "approved" });
-    storage.createActivity({
+    await storage.updateConversation(id, { status: "resolved", ownerAction: "approved" });
+    await storage.createActivity({
       businessId: conversation.businessId,
       type: "email_replied",
       title: `Owner replied to ${conversation.contactName}`,
@@ -175,23 +175,22 @@ export async function registerRoutes(
   });
 
   // ── Calendar ──────────────────────────────────────────
-  app.get("/api/calendar/events", (req, res) => {
+  app.get("/api/calendar/events", async (req, res) => {
     const startDate = typeof req.query.start === "string" ? req.query.start : undefined;
     const endDate = typeof req.query.end === "string" ? req.query.end : undefined;
-    const events = storage.listCalendarEvents(startDate, endDate);
+    const events = await storage.listCalendarEvents(startDate, endDate);
     res.json(events);
   });
 
-  app.post("/api/calendar/events", (req, res) => {
+  app.post("/api/calendar/events", async (req, res) => {
     const parsed = insertCalendarEventSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: "Invalid data", errors: parsed.error.issues });
     }
-    const event = storage.createCalendarEvent(parsed.data);
-    // Log activity
-    const biz = storage.getBusiness();
+    const event = await storage.createCalendarEvent(parsed.data);
+    const biz = await storage.getBusiness();
     if (biz) {
-      storage.createActivity({
+      await storage.createActivity({
         businessId: biz.id,
         type: "appointment_booked",
         title: `New appointment: ${parsed.data.title}`,
@@ -202,22 +201,21 @@ export async function registerRoutes(
     res.status(201).json(event);
   });
 
-  app.get("/api/calendar/availability", (_req, res) => {
-    // Simplified availability — return business hours minus booked slots
-    const events = storage.listCalendarEvents();
+  app.get("/api/calendar/availability", async (_req, res) => {
+    const events = await storage.listCalendarEvents();
     res.json({ available: true, bookedSlots: events.length });
   });
 
   // ── Activity Feed ─────────────────────────────────────
-  app.get("/api/activity", (req, res) => {
+  app.get("/api/activity", async (req, res) => {
     const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit) : 20;
-    const activity = storage.listActivity(limit);
+    const activity = await storage.listActivity(limit);
     res.json(activity);
   });
 
   // ── Dashboard Stats ───────────────────────────────────
-  app.get("/api/stats", (_req, res) => {
-    const stats = storage.getStats();
+  app.get("/api/stats", async (_req, res) => {
+    const stats = await storage.getStats();
     res.json(stats);
   });
 
@@ -226,7 +224,7 @@ export async function registerRoutes(
     res.json({ ok: true }); // Respond immediately to Telegram
 
     const update = req.body;
-    const biz = storage.getBusiness();
+    const biz = await storage.getBusiness();
 
     // Handle callback queries (inline button presses)
     if (update.callback_query) {
@@ -238,10 +236,10 @@ export async function registerRoutes(
 
       if (data?.startsWith("approve_")) {
         const convoId = parseInt(data.replace("approve_", ""));
-        storage.updateConversation(convoId, { status: "auto_replied", ownerAction: "approved" });
+        await storage.updateConversation(convoId, { status: "auto_replied", ownerAction: "approved" });
         await sendTelegramMessage(chatId, "\u2705 Approved! AI response has been sent.");
         if (biz) {
-          storage.createActivity({
+          await storage.createActivity({
             businessId: biz.id,
             type: "email_replied",
             title: `Owner approved AI response for conversation #${convoId}`,
@@ -251,13 +249,13 @@ export async function registerRoutes(
         }
       } else if (data?.startsWith("reject_")) {
         const convoId = parseInt(data.replace("reject_", ""));
-        storage.updateConversation(convoId, { status: "escalated", ownerAction: "rejected" });
+        await storage.updateConversation(convoId, { status: "escalated", ownerAction: "rejected" });
         await sendTelegramMessage(chatId, "\u274c Rejected. Conversation moved to escalated — you can reply from the dashboard.");
       } else if (data?.startsWith("view_")) {
         const convoId = parseInt(data.replace("view_", ""));
-        const convo = storage.getConversation(convoId);
+        const convo = await storage.getConversation(convoId);
         if (convo) {
-          const msgs = storage.listMessages(convoId);
+          const msgs = await storage.listMessages(convoId);
           await sendTelegramMessage(chatId, formatConversationForTelegram(convo, msgs));
         } else {
           await sendTelegramMessage(chatId, "Conversation not found.");
@@ -283,7 +281,7 @@ export async function registerRoutes(
 
     // Save the chat ID to the business profile if not set
     if (biz && !biz.telegramChatId) {
-      storage.updateBusiness(biz.id, { telegramChatId: chatId });
+      await storage.updateBusiness(biz.id, { telegramChatId: chatId });
     }
 
     // Command handling
@@ -319,9 +317,9 @@ export async function registerRoutes(
     }
 
     if (text === "/briefing") {
-      const stats = storage.getStats();
-      const activity = storage.listActivity(10);
-      const events = storage.listCalendarEvents();
+      const stats = await storage.getStats();
+      const activity = await storage.listActivity(10);
+      const events = await storage.listCalendarEvents();
       const todayEvents = events.filter((e) => {
         const eventDate = new Date(e.startTime).toDateString();
         return eventDate === new Date().toDateString();
@@ -332,21 +330,21 @@ export async function registerRoutes(
     }
 
     if (text === "/stats") {
-      const stats = storage.getStats();
+      const stats = await storage.getStats();
       const msg = `<b>\ud83d\udcca Dashboard Stats</b>\n\n`
         + `Total conversations: <b>${stats.totalConversations}</b>\n`
         + `Auto-replied: <b>${stats.autoReplied}</b>\n`
         + `Escalated: <b>${stats.escalated}</b>\n`
-        + `New (unread): <b>${stats.newCount}</b>\n`
+        + `New (unread): <b>${stats.newConversations}</b>\n`
         + `Upcoming appointments: <b>${stats.upcomingAppointments}</b>`;
       await sendTelegramMessage(chatId, msg);
       return;
     }
 
     if (text.startsWith("/inbox")) {
-      const filter = text.split(" ")[1]; // e.g., /inbox new, /inbox escalated
+      const filter = text.split(" ")[1];
       const filters = filter ? { status: filter } : undefined;
-      const convos = storage.listConversations(filters);
+      const convos = await storage.listConversations(filters);
       if (convos.length === 0) {
         await sendTelegramMessage(chatId, "\ud83d\udcec No conversations found" + (filter ? ` with status: ${filter}` : "") + ".");
         return;
@@ -369,12 +367,12 @@ export async function registerRoutes(
         await sendTelegramMessage(chatId, "Usage: /view [conversation_id]");
         return;
       }
-      const convo = storage.getConversation(convoId);
+      const convo = await storage.getConversation(convoId);
       if (!convo) {
         await sendTelegramMessage(chatId, "Conversation not found.");
         return;
       }
-      const msgs = storage.listMessages(convoId);
+      const msgs = await storage.listMessages(convoId);
       const formatted = formatConversationForTelegram(convo, msgs);
 
       const buttons = [];
@@ -393,7 +391,7 @@ export async function registerRoutes(
     }
 
     if (text === "/calendar") {
-      const events = storage.listCalendarEvents();
+      const events = await storage.listCalendarEvents();
       if (events.length === 0) {
         await sendTelegramMessage(chatId, "\ud83d\udcc5 No upcoming appointments.");
         return;
@@ -419,20 +417,20 @@ export async function registerRoutes(
         await sendTelegramMessage(chatId, "Usage: /reply [id] [your message]");
         return;
       }
-      const convo = storage.getConversation(convoId);
+      const convo = await storage.getConversation(convoId);
       if (!convo) {
         await sendTelegramMessage(chatId, "Conversation not found.");
         return;
       }
-      storage.createMessage({
+      await storage.createMessage({
         conversationId: convoId,
         role: "owner",
         content: replyText,
         createdAt: new Date().toISOString(),
       });
-      storage.updateConversation(convoId, { status: "resolved", ownerAction: "approved" });
+      await storage.updateConversation(convoId, { status: "resolved", ownerAction: "approved" });
       if (biz) {
-        storage.createActivity({
+        await storage.createActivity({
           businessId: biz.id,
           type: "email_replied",
           title: `Owner replied to ${convo.contactName} via Telegram`,
@@ -450,7 +448,7 @@ export async function registerRoutes(
         await sendTelegramMessage(chatId, "Usage: /approve [id]");
         return;
       }
-      storage.updateConversation(convoId, { status: "auto_replied", ownerAction: "approved" });
+      await storage.updateConversation(convoId, { status: "auto_replied", ownerAction: "approved" });
       await sendTelegramMessage(chatId, `\u2705 Conversation #${convoId} approved.`);
       return;
     }
@@ -461,7 +459,7 @@ export async function registerRoutes(
         await sendTelegramMessage(chatId, "Usage: /reject [id]");
         return;
       }
-      storage.updateConversation(convoId, { status: "escalated", ownerAction: "rejected" });
+      await storage.updateConversation(convoId, { status: "escalated", ownerAction: "rejected" });
       await sendTelegramMessage(chatId, `\u274c Conversation #${convoId} rejected and escalated.`);
       return;
     }
@@ -514,20 +512,20 @@ export async function registerRoutes(
   });
 
   app.post("/api/telegram/send-briefing", async (_req, res) => {
-    const biz = storage.getBusiness();
+    const biz = await storage.getBusiness();
     if (!biz?.telegramChatId) {
       return res.status(400).json({ message: "No Telegram chat ID configured. Send /start to the bot first." });
     }
-    const stats = storage.getStats();
-    const activity = storage.listActivity(10);
-    const events = storage.listCalendarEvents();
+    const stats = await storage.getStats();
+    const activity = await storage.listActivity(10);
+    const events = await storage.listCalendarEvents();
     const briefing = formatBriefing(stats, activity, events);
     const result = await sendTelegramMessage(biz.telegramChatId, briefing);
     res.json({ sent: !!result?.ok });
   });
 
   app.post("/api/telegram/notify", async (req, res) => {
-    const biz = storage.getBusiness();
+    const biz = await storage.getBusiness();
     if (!biz?.telegramChatId) {
       return res.status(400).json({ message: "No Telegram chat ID configured." });
     }
@@ -542,12 +540,12 @@ export async function registerRoutes(
   });
 
   // ── Email Processing (simulated) ──────────────────────
-  app.post("/api/email/process", (req, res) => {
-    const biz = storage.getBusiness();
+  app.post("/api/email/process", async (req, res) => {
+    const biz = await storage.getBusiness();
     if (!biz) {
       return res.status(400).json({ message: "No business configured" });
     }
-    const conversation = storage.createConversation({
+    const conversation = await storage.createConversation({
       businessId: biz.id,
       source: "email",
       contactName: req.body.from_name || "Unknown",
@@ -560,14 +558,14 @@ export async function registerRoutes(
       updatedAt: new Date().toISOString(),
     });
     if (req.body.body) {
-      storage.createMessage({
+      await storage.createMessage({
         conversationId: conversation.id,
         role: "customer",
         content: req.body.body,
         createdAt: new Date().toISOString(),
       });
     }
-    storage.createActivity({
+    await storage.createActivity({
       businessId: biz.id,
       type: "email_received",
       title: `New email from ${req.body.from_name || req.body.from_email}`,
@@ -577,8 +575,8 @@ export async function registerRoutes(
     res.status(201).json(conversation);
   });
 
-  app.get("/api/email/inbox", (_req, res) => {
-    const convos = storage.listConversations();
+  app.get("/api/email/inbox", async (_req, res) => {
+    const convos = await storage.listConversations();
     const emails = convos.filter((c) => c.source === "email");
     res.json(emails);
   });
