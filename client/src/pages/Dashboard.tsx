@@ -15,6 +15,8 @@ import {
   TrendingUp,
   Zap,
   Phone,
+  ArrowRight,
+  Plug,
 } from "lucide-react";
 import type { Stats, ActivityLog } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
@@ -105,7 +107,8 @@ export default function Dashboard() {
     queryKey: ["/api/activity"],
   });
 
-  const assistantName = authData?.business?.assistantName || "IronClaw";
+  const business = authData?.business;
+  const assistantName = business?.assistantName || "IronClaw";
   const userName = authData?.user?.fullName?.split(" ")[0] || "there";
 
   return (
@@ -126,6 +129,26 @@ export default function Dashboard() {
             Good to see you, {userName}. Here's what's happening.
           </p>
         </div>
+
+        {/* Setup Banner — show when channels aren't all connected */}
+        {business && (
+          !business.telegramChatId || !business.twilioPhoneNumber
+        ) && (
+          <Link href="/setup">
+            <div className="mb-6 p-4 rounded-xl bg-primary/8 border border-primary/25 flex items-center gap-4 cursor-pointer hover:bg-primary/12 transition-colors group" data-testid="banner-finish-setup">
+              <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
+                <Plug size={20} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-bold text-foreground">Finish setting up your channels</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Connect email, Telegram, and phone so your AI assistant can start working for you.
+                </div>
+              </div>
+              <ArrowRight size={18} className="text-primary flex-shrink-0 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
@@ -233,6 +256,16 @@ export default function Dashboard() {
                   >
                     <Plus size={15} />
                     Add Appointment
+                  </Button>
+                </Link>
+                <Link href="/setup">
+                  <Button
+                    data-testid="button-go-setup"
+                    variant="outline"
+                    className="w-full justify-start gap-2.5 border-border text-sm"
+                  >
+                    <Plug size={15} />
+                    Channel Setup
                   </Button>
                 </Link>
                 <Link href="/settings">

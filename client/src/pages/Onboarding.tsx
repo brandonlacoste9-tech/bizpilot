@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { IronClawLogo } from "@/components/AppLayout";
+import { HoneycombBackground } from "@/components/HoneycombBackground";
 import { ArrowRight, ArrowLeft, CheckCircle, Building2, Settings, MessageSquare } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────
@@ -33,12 +34,12 @@ const step2Schema = z.object({
 const step3Schema = z.object({
   assistantName: z.string().min(1, "Give your assistant a name").default("IronClaw"),
   aiInstructions: z.string().optional(),
-  telegramChatId: z.string().optional(),
 });
 
 type Step1 = z.infer<typeof step1Schema>;
 type Step2 = z.infer<typeof step2Schema>;
 type Step3 = z.infer<typeof step3Schema>;
+
 
 // ─────────────────────────────────────────────────────────────
 // Step indicators
@@ -117,15 +118,15 @@ export default function Onboarding() {
 
   const form3 = useForm<Step3>({
     resolver: zodResolver(step3Schema),
-    defaultValues: { assistantName: "IronClaw", aiInstructions: "", telegramChatId: "" },
+    defaultValues: { assistantName: "IronClaw", aiInstructions: "" },
   });
 
   const createBusinessMutation = useMutation({
     mutationFn: (payload: any) => apiRequest("POST", "/api/onboarding", payload),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      toast({ title: "Setup complete!", description: "Your AI assistant is ready." });
-      setLocation("/dashboard");
+      toast({ title: "Setup complete!", description: "Now let's connect your channels." });
+      setLocation("/setup");
     },
     onError: (err: any) => {
       toast({ title: "Setup failed", description: err.message, variant: "destructive" });
@@ -159,7 +160,6 @@ export default function Onboarding() {
         : null,
       assistantName: data.assistantName || "IronClaw",
       aiInstructions: data.aiInstructions,
-      telegramChatId: data.telegramChatId,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
 
@@ -167,8 +167,9 @@ export default function Onboarding() {
   });
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="relative min-h-screen bg-background flex items-center justify-center px-4 overflow-hidden">
+      <HoneycombBackground variant="page" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative w-full max-w-xl">
         {/* Header */}
@@ -344,17 +345,11 @@ export default function Onboarding() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="telegramChatId">Telegram Chat ID (optional)</Label>
-                <Input
-                  id="telegramChatId"
-                  data-testid="input-telegram-chat-id"
-                  placeholder="123456789"
-                  {...form3.register("telegramChatId")}
-                  className="bg-background border-border"
-                />
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
                 <p className="text-xs text-muted-foreground">
-                  Message <span className="text-primary font-mono">@Bee_Leroux_bot</span> on Telegram to get your Chat ID
+                  After this step, we'll guide you through connecting <strong className="text-foreground">email</strong>,{" "}
+                  <strong className="text-foreground">Telegram</strong>, and{" "}
+                  <strong className="text-foreground">phone</strong> — it's quick and easy.
                 </p>
               </div>
 

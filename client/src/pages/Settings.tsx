@@ -25,6 +25,7 @@ import {
   Phone,
   Copy,
   Check,
+  ExternalLink,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────
@@ -334,29 +335,43 @@ export default function Settings() {
             description="Receive daily briefings and approve AI actions on the go"
           >
             <div className="space-y-3">
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border">
-                <div className={`w-2 h-2 rounded-full ${business?.telegramChatId ? "bg-green-400" : "bg-muted-foreground"}`} />
-                <span className="text-sm text-muted-foreground">
-                  {business?.telegramChatId ? "Telegram connected" : "Not connected"}
-                </span>
-                {business?.telegramChatId && (
-                  <span className="ml-auto text-xs font-mono text-muted-foreground">{business.telegramChatId}</span>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="telegramChatId">Telegram Chat ID</Label>
-                <Input
-                  id="telegramChatId"
-                  data-testid="input-settings-telegram-chat-id"
-                  placeholder="123456789"
-                  {...form.register("telegramChatId")}
-                  className="bg-background border-border"
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Message <span className="text-primary font-mono">@Bee_Leroux_bot</span> on Telegram and type{" "}
-                <span className="text-primary font-mono">/start</span> to get your Chat ID.
-              </p>
+              {business?.telegramChatId ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+                  <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
+                  <div>
+                    <div className="text-sm font-medium text-green-400">Telegram connected</div>
+                    <div className="text-xs text-muted-foreground">
+                      Chat ID: <span className="font-mono">{business.telegramChatId}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Click the button below to connect Telegram in one step.
+                  </p>
+                  {business?.id && (
+                    <a
+                      href={`https://t.me/Bee_Leroux_bot?start=${business.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-[#2AABEE] text-white hover:bg-[#229ED9] font-semibold"
+                      >
+                        <MessageSquare size={14} className="mr-2" />
+                        Connect Telegram
+                        <ExternalLink size={12} className="ml-2" />
+                      </Button>
+                    </a>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    This opens Telegram directly. Tap <strong>Start</strong> and your account is linked automatically.
+                  </p>
+                </div>
+              )}
             </div>
           </Section>
 
@@ -367,25 +382,45 @@ export default function Settings() {
             description="Forward inbound emails to your AI assistant"
           >
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Configure your email provider to forward messages to this address. Your AI will automatically process and reply.
+              <p className="text-sm text-muted-foreground">
+                Forward your business emails to this address. Your AI will read, reply, and log every email.
               </p>
               {forwardingAddress ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 p-2.5 rounded-lg bg-background border border-border font-mono text-xs text-foreground truncate">
-                    {forwardingAddress}
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 p-2.5 rounded-lg bg-background border border-border font-mono text-xs text-foreground truncate">
+                      {forwardingAddress}
+                    </div>
+                    <Button
+                      type="button"
+                      data-testid="button-copy-email"
+                      variant="outline"
+                      size="sm"
+                      className="flex-shrink-0 border-border"
+                      onClick={handleCopyEmail}
+                    >
+                      {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    data-testid="button-copy-email"
-                    variant="outline"
-                    size="sm"
-                    className="flex-shrink-0 border-border"
-                    onClick={handleCopyEmail}
-                  >
-                    {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                  </Button>
-                </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p className="font-medium text-foreground">How to set it up:</p>
+                    <p>1. Copy the address above</p>
+                    <p>2. Open your email provider's forwarding settings:</p>
+                    <div className="flex flex-wrap gap-3 mt-1 mb-1">
+                      <a href="https://support.google.com/mail/answer/10957?hl=en" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                        Gmail <ExternalLink size={10} />
+                      </a>
+                      <a href="https://support.microsoft.com/en-us/office/turn-on-automatic-forwarding-in-outlook-7f2670a1-7fff-4475-8a3c-5822d63b0c8e" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                        Outlook <ExternalLink size={10} />
+                      </a>
+                      <a href="https://support.yahoo.com/kb/SLN22028.html" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary hover:underline">
+                        Yahoo <ExternalLink size={10} />
+                      </a>
+                    </div>
+                    <p>3. Paste the address as the forwarding destination</p>
+                    <p>4. New emails will automatically appear in your Inbox</p>
+                  </div>
+                </>
               ) : (
                 <div className="p-3 rounded-lg bg-background border border-border text-xs text-muted-foreground">
                   Complete onboarding to get your forwarding address.
@@ -397,19 +432,37 @@ export default function Settings() {
           {/* Phone Number */}
           <Section
             icon={<Phone size={18} />}
-            title="Phone Number"
-            description="Twilio phone number for inbound calls"
+            title="Phone Calls"
+            description="Your AI answers calls, takes messages, and transcribes voicemails"
           >
             <div className="space-y-3">
-              <div className="flex items-center gap-2 p-3 rounded-lg bg-background border border-border">
-                <div className={`w-2 h-2 rounded-full ${business?.twilioPhoneNumber ? "bg-green-400" : "bg-muted-foreground"}`} />
-                <span className="text-sm text-muted-foreground font-mono">
-                  {business?.twilioPhoneNumber || "Not configured"}
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Phone call handling requires a Pro or Enterprise plan. Configure your Twilio number in the Vercel environment variables.
-              </p>
+              {business?.twilioPhoneNumber ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+                  <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
+                  <div>
+                    <div className="text-sm font-medium text-green-400">Phone active</div>
+                    <div className="text-xs text-muted-foreground font-mono">{business.twilioPhoneNumber}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Phone call handling is available on the <strong className="text-foreground">Pro</strong> and <strong className="text-foreground">Enterprise</strong> plans.
+                    When you upgrade, a dedicated phone number is assigned to your business automatically.
+                  </p>
+                  {(subscription?.plan === "free" || !subscription?.plan || subscription?.plan === "starter") && (
+                    <a href="https://buy.stripe.com/7sY8wOcFL9Kdc0e1D31Fe0B" target="_blank" rel="noopener noreferrer">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-primary text-primary-foreground amber-glow hover:bg-primary/90 font-semibold"
+                      >
+                        Upgrade to Pro — $79/mo <ArrowRight size={14} className="ml-2" />
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
           </Section>
 
