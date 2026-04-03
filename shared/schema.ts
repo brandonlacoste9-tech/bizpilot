@@ -1,136 +1,210 @@
 import { z } from "zod";
 
-// ── Types matching the Supabase Postgres tables ─────────────
+// ─────────────────────────────────────────────────────────────
+// TypeScript Interfaces (match Supabase tables exactly)
+// ─────────────────────────────────────────────────────────────
+
+export interface User {
+  id: string;
+  email: string;
+  passwordHash: string;
+  fullName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Subscription {
+  id: string;
+  userId: string;
+  plan: "free" | "starter" | "pro" | "enterprise";
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  status: string;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  createdAt: string;
+}
 
 export interface Business {
-  id: number;
+  id: string;
+  userId: string;
   name: string;
   ownerName: string;
   email: string;
-  phone: string | null;
-  address: string | null;
-  businessHours: string | null;
-  services: string | null;
-  faqEntries: string | null;
-  telegramChatId: string | null;
-  timezone: string | null;
-  aiInstructions: string | null;
-  isActive: boolean | null;
+  phone?: string | null;
+  address?: string | null;
+  businessHours?: Record<string, any> | null;
+  services?: string[] | null;
+  faqEntries?: Array<{ question: string; answer: string }> | null;
+  timezone?: string | null;
+  aiInstructions?: string | null;
+  assistantName: string;
+  telegramChatId?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Conversation {
-  id: number;
-  businessId: number;
+  id: string;
+  businessId: string;
   source: string;
-  externalId: string | null;
-  contactName: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-  subject: string | null;
-  status: string;
-  category: string | null;
-  summary: string | null;
-  aiResponse: string | null;
-  ownerAction: string | null;
+  externalId?: string | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  subject?: string | null;
+  status: "new" | "in_progress" | "resolved" | "escalated";
+  category?: string | null;
+  summary?: string | null;
+  aiResponse?: string | null;
+  ownerAction?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Message {
-  id: number;
-  conversationId: number;
-  role: string;
+  id: string;
+  conversationId: string;
+  role: "user" | "assistant" | "system";
   content: string;
   createdAt: string;
 }
 
 export interface CalendarEvent {
-  id: number;
-  businessId: number;
-  externalId: string | null;
+  id: string;
+  businessId: string;
+  externalId?: string | null;
   title: string;
-  description: string | null;
+  description?: string | null;
   startTime: string;
   endTime: string;
-  attendees: string | null;
-  status: string | null;
-}
-
-export interface ActivityLog {
-  id: number;
-  businessId: number;
-  type: string;
-  title: string;
-  description: string | null;
-  metadata: string | null;
+  attendees?: Array<{ name: string; email: string }> | null;
+  status: string;
   createdAt: string;
 }
 
-// ── Insert schemas (used for request validation) ─────────────
+export interface ActivityLog {
+  id: string;
+  businessId: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  metadata?: Record<string, any> | null;
+  createdAt: string;
+}
 
-export const insertBusinessSchema = z.object({
-  name: z.string(),
-  ownerName: z.string(),
-  email: z.string(),
-  phone: z.string().nullable().optional(),
-  address: z.string().nullable().optional(),
-  businessHours: z.string().nullable().optional(),
-  services: z.string().nullable().optional(),
-  faqEntries: z.string().nullable().optional(),
-  telegramChatId: z.string().nullable().optional(),
-  timezone: z.string().nullable().optional(),
-  aiInstructions: z.string().nullable().optional(),
-  isActive: z.boolean().nullable().optional(),
+export interface Waitlist {
+  id: string;
+  email: string;
+  name?: string | null;
+  businessType?: string | null;
+  createdAt: string;
+}
+
+export interface Stats {
+  totalConversations: number;
+  newConversations: number;
+  autoReplied: number;
+  escalated: number;
+  upcomingAppointments: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Zod Validators
+// ─────────────────────────────────────────────────────────────
+
+export const insertUserSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  fullName: z.string().min(1, "Full name is required"),
 });
 
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export const insertBusinessSchema = z.object({
+  name: z.string().min(1, "Business name is required"),
+  ownerName: z.string().min(1, "Owner name is required"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().optional(),
+  address: z.string().optional(),
+  businessHours: z.record(z.any()).optional(),
+  services: z.array(z.string()).optional(),
+  faqEntries: z.array(z.object({ question: z.string(), answer: z.string() })).optional(),
+  timezone: z.string().optional(),
+  aiInstructions: z.string().optional(),
+  assistantName: z.string().default("IronClaw"),
+  telegramChatId: z.string().optional(),
+});
+
+export const updateBusinessSchema = insertBusinessSchema.partial();
+
 export const insertConversationSchema = z.object({
-  businessId: z.number(),
-  source: z.string(),
-  externalId: z.string().nullable().optional(),
-  contactName: z.string().nullable().optional(),
-  contactEmail: z.string().nullable().optional(),
-  contactPhone: z.string().nullable().optional(),
-  subject: z.string().nullable().optional(),
-  status: z.string().default("new"),
-  category: z.string().nullable().optional(),
-  summary: z.string().nullable().optional(),
-  aiResponse: z.string().nullable().optional(),
-  ownerAction: z.string().nullable().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  source: z.string().min(1),
+  externalId: z.string().optional(),
+  contactName: z.string().optional(),
+  contactEmail: z.string().optional(),
+  contactPhone: z.string().optional(),
+  subject: z.string().optional(),
+  status: z.enum(["new", "in_progress", "resolved", "escalated"]).default("new"),
+  category: z.string().optional(),
+  summary: z.string().optional(),
+  aiResponse: z.string().optional(),
+});
+
+export const updateConversationSchema = z.object({
+  status: z.enum(["new", "in_progress", "resolved", "escalated"]).optional(),
+  category: z.string().optional(),
+  summary: z.string().optional(),
+  aiResponse: z.string().optional(),
+  ownerAction: z.string().optional(),
 });
 
 export const insertMessageSchema = z.object({
-  conversationId: z.number(),
-  role: z.string(),
-  content: z.string(),
-  createdAt: z.string(),
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string().min(1, "Message content is required"),
 });
 
 export const insertCalendarEventSchema = z.object({
-  businessId: z.number(),
-  externalId: z.string().nullable().optional(),
-  title: z.string(),
-  description: z.string().nullable().optional(),
-  startTime: z.string(),
-  endTime: z.string(),
-  attendees: z.string().nullable().optional(),
-  status: z.string().nullable().optional(),
+  externalId: z.string().optional(),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  startTime: z.string().min(1, "Start time is required"),
+  endTime: z.string().min(1, "End time is required"),
+  attendees: z.array(z.object({ name: z.string(), email: z.string() })).optional(),
+  status: z.string().default("confirmed"),
 });
+
+export const updateCalendarEventSchema = insertCalendarEventSchema.partial();
 
 export const insertActivityLogSchema = z.object({
-  businessId: z.number(),
-  type: z.string(),
-  title: z.string(),
-  description: z.string().nullable().optional(),
-  metadata: z.string().nullable().optional(),
-  createdAt: z.string(),
+  type: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
 });
 
-// ── Insert types ─────────────────────────────────────────────
+export const insertWaitlistSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  name: z.string().optional(),
+  businessType: z.string().optional(),
+});
 
+// ─────────────────────────────────────────────────────────────
+// Insert Types
+// ─────────────────────────────────────────────────────────────
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
 export type InsertBusiness = z.infer<typeof insertBusinessSchema>;
+export type UpdateBusiness = z.infer<typeof updateBusinessSchema>;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type UpdateConversation = z.infer<typeof updateConversationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertCalendarEvent = z.infer<typeof insertCalendarEventSchema>;
+export type UpdateCalendarEvent = z.infer<typeof updateCalendarEventSchema>;
 export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type InsertWaitlist = z.infer<typeof insertWaitlistSchema>;

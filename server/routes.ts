@@ -1,585 +1,515 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { storage, seedDatabase } from "./storage.js";
-import { insertBusinessSchema, insertConversationSchema, insertMessageSchema, insertCalendarEventSchema } from "../shared/schema.js";
+import type { Express, Request, Response, NextFunction } from "express";
+import type { Server } from "http";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
+import { storage } from "./storage.js";
+import {
+  insertUserSchema,
+  loginSchema,
+  insertBusinessSchema,
+  updateBusinessSchema,
+  insertConversationSchema,
+  updateConversationSchema,
+  insertMessageSchema,
+  insertCalendarEventSchema,
+  updateCalendarEventSchema,
+  insertWaitlistSchema,
+} from "../shared/schema.js";
 
-// ── Telegram Bot Config ─────────────────────────────────
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+// ─────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────
 
-async function sendTelegramMessage(chatId: string, text: string, parseMode: string = "HTML") {
+const JWT_SECRET =
+  process.env.JWT_SECRET || "ironclaw_jwt_secret_2026_production";
+
+const TELEGRAM_BOT_TOKEN =
+  process.env.TELEGRAM_BOT_TOKEN ||
+  "8742735228:AAEgtHawWmQKFzt66lknioB2XI6DzNad4UI";
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  path: "/",
+};
+
+// ─────────────────────────────────────────────────────────────
+// Auth middleware
+// ─────────────────────────────────────────────────────────────
+
+interface AuthRequest extends Request {
+  userId?: string;
+}
+
+function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  const token = req.cookies?.ironclaw_token;
+  if (!token) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
   try {
-    const resp = await fetch(`${TELEGRAM_API}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, parse_mode: parseMode }),
-    });
-    const data = await resp.json();
-    if (!data.ok) {
-      console.error("Telegram sendMessage error:", data);
-    }
-    return data;
-  } catch (err) {
-    console.error("Telegram sendMessage failed:", err);
-    return null;
+    const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
+    req.userId = payload.userId;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Invalid or expired session" });
   }
 }
 
-async function sendTelegramMessageWithButtons(
-  chatId: string,
-  text: string,
-  buttons: { text: string; callback_data: string }[][]
-) {
-  try {
-    const resp = await fetch(`${TELEGRAM_API}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        parse_mode: "HTML",
-        reply_markup: { inline_keyboard: buttons },
-      }),
-    });
-    return await resp.json();
-  } catch (err) {
-    console.error("Telegram sendMessage with buttons failed:", err);
-    return null;
-  }
-}
-
-function formatBriefing(stats: any, activity: any[], events: any[]) {
-  let msg = `<b>\u2600\ufe0f Good morning! Here's your daily briefing:</b>\n\n`;
-  msg += `<b>Today's Numbers:</b>\n`;
-  msg += `  \u2022 Total conversations: ${stats.totalConversations}\n`;
-  msg += `  \u2022 Auto-replied: ${stats.autoReplied}\n`;
-  msg += `  \u2022 Escalated (needs you): ${stats.escalated}\n`;
-  msg += `  \u2022 Upcoming appointments: ${stats.upcomingAppointments}\n\n`;
-
-  if (stats.escalated > 0) {
-    msg += `<b>\u26a0\ufe0f Needs Your Attention:</b>\n`;
-    const escalated = activity.filter((a: any) => a.type === "escalation");
-    escalated.forEach((a: any) => {
-      msg += `  \u2022 ${a.title}\n    ${a.description || ""}\n`;
-    });
-    msg += `\n`;
-  }
-
-  if (events.length > 0) {
-    msg += `<b>\ud83d\udcc5 Today's Appointments:</b>\n`;
-    events.forEach((e: any) => {
-      msg += `  \u2022 ${e.title}\n    ${e.startTime} \u2014 ${e.endTime}\n`;
-    });
-    msg += `\n`;
-  }
-
-  msg += `<i>Reply with commands:\n/inbox - View inbox\n/calendar - Today's schedule\n/stats - Quick stats\n/help - All commands</i>`;
-  return msg;
-}
-
-function formatConversationForTelegram(convo: any, msgs: any[]) {
-  let text = `<b>${convo.subject || "No subject"}</b>\n`;
-  text += `From: ${convo.contactName || "Unknown"} (${convo.contactEmail || "no email"})\n`;
-  text += `Status: ${convo.status} | Category: ${convo.category || "uncategorized"}\n`;
-  text += `\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n`;
-  msgs.slice(-3).forEach((m: any) => {
-    const label = m.role === "customer" ? "\ud83d\udc64 Customer" : m.role === "ai" ? "\ud83e\udd16 AI" : "\ud83d\udc64 You";
-    text += `${label}:\n${m.content.substring(0, 300)}\n\n`;
-  });
-  return text;
-}
+// ─────────────────────────────────────────────────────────────
+// Route registration
+// ─────────────────────────────────────────────────────────────
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Seed on startup (async now)
-  await seedDatabase();
+  app.use(cookieParser());
 
-  // ── Business ──────────────────────────────────────────
-  app.get("/api/business", async (_req, res) => {
-    const business = await storage.getBusiness();
-    if (!business) {
-      return res.status(404).json({ message: "No business profile found" });
-    }
-    res.json(business);
-  });
+  // ── Auth ─────────────────────────────────────────────────
 
-  app.post("/api/business", async (req, res) => {
-    const parsed = insertBusinessSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid data", errors: parsed.error.issues });
-    }
-    const business = await storage.createBusiness(parsed.data);
-    res.status(201).json(business);
-  });
+  // POST /api/auth/signup
+  app.post("/api/auth/signup", async (req: Request, res: Response) => {
+    try {
+      const parsed = insertUserSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+      const { email, password, fullName } = parsed.data;
 
-  app.patch("/api/business/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    const business = await storage.updateBusiness(id, req.body);
-    if (!business) {
-      return res.status(404).json({ message: "Business not found" });
-    }
-    res.json(business);
-  });
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        return res.status(409).json({ message: "Email already registered" });
+      }
 
-  // ── Conversations ─────────────────────────────────────
-  app.get("/api/conversations", async (req, res) => {
-    const filters: { status?: string; category?: string } = {};
-    if (typeof req.query.status === "string") filters.status = req.query.status;
-    if (typeof req.query.category === "string") filters.category = req.query.category;
-    const convos = await storage.listConversations(Object.keys(filters).length > 0 ? filters : undefined);
-    res.json(convos);
-  });
+      const passwordHash = await bcrypt.hash(password, 12);
+      const user = await storage.createUser(email, passwordHash, fullName);
 
-  app.get("/api/conversations/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    const conversation = await storage.getConversation(id);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
-    const msgs = await storage.listMessages(id);
-    res.json({ ...conversation, messages: msgs });
-  });
+      // Create free subscription
+      await storage.createSubscription(user.id, "free");
 
-  app.patch("/api/conversations/:id", async (req, res) => {
-    const id = parseInt(req.params.id);
-    const conversation = await storage.updateConversation(id, req.body);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
-    res.json(conversation);
-  });
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+      res.cookie("ironclaw_token", token, COOKIE_OPTIONS);
 
-  app.post("/api/conversations/:id/reply", async (req, res) => {
-    const id = parseInt(req.params.id);
-    const conversation = await storage.getConversation(id);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
-    const message = await storage.createMessage({
-      conversationId: id,
-      role: "owner",
-      content: req.body.content,
-      createdAt: new Date().toISOString(),
-    });
-    await storage.updateConversation(id, { status: "resolved", ownerAction: "approved" });
-    await storage.createActivity({
-      businessId: conversation.businessId,
-      type: "email_replied",
-      title: `Owner replied to ${conversation.contactName}`,
-      description: req.body.content.substring(0, 100),
-      createdAt: new Date().toISOString(),
-    });
-    res.status(201).json(message);
-  });
-
-  // ── Calendar ──────────────────────────────────────────
-  app.get("/api/calendar/events", async (req, res) => {
-    const startDate = typeof req.query.start === "string" ? req.query.start : undefined;
-    const endDate = typeof req.query.end === "string" ? req.query.end : undefined;
-    const events = await storage.listCalendarEvents(startDate, endDate);
-    res.json(events);
-  });
-
-  app.post("/api/calendar/events", async (req, res) => {
-    const parsed = insertCalendarEventSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ message: "Invalid data", errors: parsed.error.issues });
-    }
-    const event = await storage.createCalendarEvent(parsed.data);
-    const biz = await storage.getBusiness();
-    if (biz) {
-      await storage.createActivity({
-        businessId: biz.id,
-        type: "appointment_booked",
-        title: `New appointment: ${parsed.data.title}`,
-        description: `Scheduled for ${parsed.data.startTime}`,
-        createdAt: new Date().toISOString(),
+      return res.status(201).json({
+        user: { id: user.id, email: user.email, fullName: user.fullName },
       });
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      return res.status(500).json({ message: err.message || "Signup failed" });
     }
-    res.status(201).json(event);
   });
 
-  app.get("/api/calendar/availability", async (_req, res) => {
-    const events = await storage.listCalendarEvents();
-    res.json({ available: true, bookedSlots: events.length });
+  // POST /api/auth/login
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+      const { email, password } = parsed.data;
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
+      res.cookie("ironclaw_token", token, COOKIE_OPTIONS);
+
+      return res.json({
+        user: { id: user.id, email: user.email, fullName: user.fullName },
+      });
+    } catch (err: any) {
+      console.error("Login error:", err);
+      return res.status(500).json({ message: "Login failed" });
+    }
   });
 
-  // ── Activity Feed ─────────────────────────────────────
-  app.get("/api/activity", async (req, res) => {
-    const limit = typeof req.query.limit === "string" ? parseInt(req.query.limit) : 20;
-    const activity = await storage.listActivity(limit);
-    res.json(activity);
+  // POST /api/auth/logout
+  app.post("/api/auth/logout", (_req: Request, res: Response) => {
+    res.clearCookie("ironclaw_token", { path: "/" });
+    return res.json({ message: "Logged out" });
   });
 
-  // ── Dashboard Stats ───────────────────────────────────
-  app.get("/api/stats", async (_req, res) => {
-    const stats = await storage.getStats();
-    res.json(stats);
+  // GET /api/auth/me
+  app.get("/api/auth/me", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const user = await storage.getUserById(req.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const subscription = await storage.getSubscriptionByUserId(user.id);
+      const business = await storage.getBusinessByUserId(user.id);
+
+      return res.json({
+        user: { id: user.id, email: user.email, fullName: user.fullName },
+        subscription,
+        business,
+        hasCompletedOnboarding: !!business,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch user" });
+    }
   });
 
-  // ── Telegram Webhook ──────────────────────────────────
-  app.post("/api/telegram/webhook", async (req, res) => {
-    res.json({ ok: true }); // Respond immediately to Telegram
+  // ── Business ─────────────────────────────────────────────
 
-    const update = req.body;
-    const biz = await storage.getBusiness();
+  // GET /api/business
+  app.get("/api/business", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+      return res.json(business);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch business" });
+    }
+  });
 
-    // Handle callback queries (inline button presses)
-    if (update.callback_query) {
-      const cb = update.callback_query;
-      const chatId = cb.message?.chat?.id?.toString();
-      if (!chatId) return;
+  // PATCH /api/business
+  app.patch("/api/business", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
 
-      const data = cb.callback_data;
-
-      if (data?.startsWith("approve_")) {
-        const convoId = parseInt(data.replace("approve_", ""));
-        await storage.updateConversation(convoId, { status: "auto_replied", ownerAction: "approved" });
-        await sendTelegramMessage(chatId, "\u2705 Approved! AI response has been sent.");
-        if (biz) {
-          await storage.createActivity({
-            businessId: biz.id,
-            type: "email_replied",
-            title: `Owner approved AI response for conversation #${convoId}`,
-            description: "Approved via Telegram.",
-            createdAt: new Date().toISOString(),
-          });
-        }
-      } else if (data?.startsWith("reject_")) {
-        const convoId = parseInt(data.replace("reject_", ""));
-        await storage.updateConversation(convoId, { status: "escalated", ownerAction: "rejected" });
-        await sendTelegramMessage(chatId, "\u274c Rejected. Conversation moved to escalated — you can reply from the dashboard.");
-      } else if (data?.startsWith("view_")) {
-        const convoId = parseInt(data.replace("view_", ""));
-        const convo = await storage.getConversation(convoId);
-        if (convo) {
-          const msgs = await storage.listMessages(convoId);
-          await sendTelegramMessage(chatId, formatConversationForTelegram(convo, msgs));
-        } else {
-          await sendTelegramMessage(chatId, "Conversation not found.");
-        }
+      const parsed = updateBusinessSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
       }
 
-      // Answer callback to remove loading state
-      await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callback_query_id: cb.id }),
+      const updated = await storage.updateBusiness(business.id, parsed.data);
+      return res.json(updated);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to update business" });
+    }
+  });
+
+  // POST /api/onboarding
+  app.post("/api/onboarding", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const existing = await storage.getBusinessByUserId(req.userId!);
+      if (existing) {
+        return res.status(409).json({ message: "Business already created" });
+      }
+
+      const parsed = insertBusinessSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+
+      const business = await storage.createBusiness(req.userId!, parsed.data);
+
+      await storage.createActivityLog(business.id, {
+        type: "system",
+        title: "Business profile created",
+        description: `Welcome to IronClaw! Your assistant ${business.assistantName} is ready.`,
       });
-      return;
+
+      return res.status(201).json(business);
+    } catch (err: any) {
+      console.error("Onboarding error:", err);
+      return res.status(500).json({ message: err.message || "Onboarding failed" });
     }
+  });
 
-    // Handle regular messages
-    const message = update.message;
-    if (!message?.text) return;
+  // ── Conversations ─────────────────────────────────────────
 
-    const chatId = message.chat.id.toString();
-    const text = message.text.trim();
-    const firstName = message.from?.first_name || "there";
+  // GET /api/conversations
+  app.get("/api/conversations", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
 
-    // Save the chat ID to the business profile if not set
-    if (biz && !biz.telegramChatId) {
-      await storage.updateBusiness(biz.id, { telegramChatId: chatId });
+      const { status, category } = req.query as Record<string, string>;
+      const conversations = await storage.listConversations(business.id, { status, category });
+      return res.json(conversations);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch conversations" });
     }
+  });
 
-    // Command handling
-    if (text === "/start") {
-      const welcome = `<b>Welcome to BizPilot, ${firstName}!</b> \ud83d\ude80\n\n`
-        + `I'm your AI business assistant. I handle your emails, schedule appointments, and keep you updated while you're on the go.\n\n`
-        + `<b>Commands:</b>\n`
-        + `/briefing — Daily briefing\n`
-        + `/inbox — View latest conversations\n`
-        + `/calendar — Today's appointments\n`
-        + `/stats — Quick dashboard stats\n`
-        + `/help — All commands\n\n`
-        + `<i>Your chat ID: <code>${chatId}</code></i>\n`
-        + `<i>I'll notify you here when new emails arrive or something needs your attention.</i>`;
-      await sendTelegramMessage(chatId, welcome);
-      return;
+  // GET /api/conversations/:id
+  app.get("/api/conversations/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const conversation = await storage.getConversation(req.params.id, business.id);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+
+      const messages = await storage.listMessagesByConversation(conversation.id);
+      return res.json({ conversation, messages });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch conversation" });
     }
+  });
 
-    if (text === "/help") {
-      const help = `<b>BizPilot Commands:</b>\n\n`
-        + `/briefing — Get your morning briefing\n`
-        + `/inbox — See latest conversations\n`
-        + `/inbox new — Only new/unread conversations\n`
-        + `/inbox escalated — Items needing your attention\n`
-        + `/calendar — Today's schedule\n`
-        + `/stats — Quick numbers\n`
-        + `/reply [id] [message] — Reply to a conversation\n`
-        + `/approve [id] — Approve an AI draft\n`
-        + `/reject [id] — Reject an AI draft\n\n`
-        + `You can also just send me a message and I'll help you figure out the right action.`;
-      await sendTelegramMessage(chatId, help);
-      return;
+  // POST /api/conversations
+  app.post("/api/conversations", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const parsed = insertConversationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+
+      const conversation = await storage.createConversation(business.id, parsed.data);
+      return res.status(201).json(conversation);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to create conversation" });
     }
+  });
 
-    if (text === "/briefing") {
-      const stats = await storage.getStats();
-      const activity = await storage.listActivity(10);
-      const events = await storage.listCalendarEvents();
-      const todayEvents = events.filter((e) => {
-        const eventDate = new Date(e.startTime).toDateString();
-        return eventDate === new Date().toDateString();
+  // PATCH /api/conversations/:id
+  app.patch("/api/conversations/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const parsed = updateConversationSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+
+      const updated = await storage.updateConversation(req.params.id, business.id, parsed.data);
+      if (!updated) return res.status(404).json({ message: "Conversation not found" });
+
+      return res.json(updated);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to update conversation" });
+    }
+  });
+
+  // POST /api/conversations/:id/reply
+  app.post("/api/conversations/:id/reply", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const conversation = await storage.getConversation(req.params.id, business.id);
+      if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+
+      const parsed = insertMessageSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+
+      const message = await storage.createMessage(
+        conversation.id,
+        parsed.data.role,
+        parsed.data.content
+      );
+
+      // Update conversation status
+      await storage.updateConversation(req.params.id, business.id, {
+        status: "in_progress",
+        ownerAction: "replied",
       });
-      const briefing = formatBriefing(stats, activity, todayEvents);
-      await sendTelegramMessage(chatId, briefing);
-      return;
-    }
 
-    if (text === "/stats") {
-      const stats = await storage.getStats();
-      const msg = `<b>\ud83d\udcca Dashboard Stats</b>\n\n`
-        + `Total conversations: <b>${stats.totalConversations}</b>\n`
-        + `Auto-replied: <b>${stats.autoReplied}</b>\n`
-        + `Escalated: <b>${stats.escalated}</b>\n`
-        + `New (unread): <b>${stats.newConversations}</b>\n`
-        + `Upcoming appointments: <b>${stats.upcomingAppointments}</b>`;
-      await sendTelegramMessage(chatId, msg);
-      return;
-    }
-
-    if (text.startsWith("/inbox")) {
-      const filter = text.split(" ")[1];
-      const filters = filter ? { status: filter } : undefined;
-      const convos = await storage.listConversations(filters);
-      if (convos.length === 0) {
-        await sendTelegramMessage(chatId, "\ud83d\udcec No conversations found" + (filter ? ` with status: ${filter}` : "") + ".");
-        return;
-      }
-      let msg = `<b>\ud83d\udcec Inbox</b>${filter ? ` (${filter})` : ""}\n\n`;
-      convos.slice(0, 8).forEach((c, i) => {
-        const statusIcon = c.status === "new" ? "\ud83d\udd35" : c.status === "escalated" ? "\ud83d\udd34" : c.status === "auto_replied" ? "\ud83d\udfe2" : "\u2705";
-        msg += `${statusIcon} <b>#${c.id}</b> ${c.contactName || "Unknown"}\n`;
-        msg += `   ${c.subject || "No subject"}\n`;
-        msg += `   ${c.category || ""} | ${c.status}\n\n`;
+      await storage.createActivityLog(business.id, {
+        type: "reply",
+        title: "Reply sent",
+        description: `Replied to conversation: ${conversation.subject || "No subject"}`,
       });
-      msg += `<i>Use /view [id] to see full conversation</i>`;
-      await sendTelegramMessage(chatId, msg);
-      return;
+
+      return res.status(201).json(message);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to send reply" });
     }
+  });
 
-    if (text.startsWith("/view")) {
-      const convoId = parseInt(text.split(" ")[1]);
-      if (isNaN(convoId)) {
-        await sendTelegramMessage(chatId, "Usage: /view [conversation_id]");
-        return;
-      }
-      const convo = await storage.getConversation(convoId);
-      if (!convo) {
-        await sendTelegramMessage(chatId, "Conversation not found.");
-        return;
-      }
-      const msgs = await storage.listMessages(convoId);
-      const formatted = formatConversationForTelegram(convo, msgs);
+  // ── Calendar ──────────────────────────────────────────────
 
-      const buttons = [];
-      if (convo.status === "new" || convo.status === "escalated") {
-        buttons.push([
-          { text: "\u2705 Approve", callback_data: `approve_${convoId}` },
-          { text: "\u274c Reject", callback_data: `reject_${convoId}` },
-        ]);
-      }
-      if (buttons.length > 0) {
-        await sendTelegramMessageWithButtons(chatId, formatted, buttons);
-      } else {
-        await sendTelegramMessage(chatId, formatted);
-      }
-      return;
+  // GET /api/calendar/events
+  app.get("/api/calendar/events", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const { from, to } = req.query as Record<string, string>;
+      const events = await storage.listCalendarEvents(business.id, from, to);
+      return res.json(events);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch events" });
     }
+  });
 
-    if (text === "/calendar") {
-      const events = await storage.listCalendarEvents();
-      if (events.length === 0) {
-        await sendTelegramMessage(chatId, "\ud83d\udcc5 No upcoming appointments.");
-        return;
+  // POST /api/calendar/events
+  app.post("/api/calendar/events", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const parsed = insertCalendarEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
       }
-      let msg = `<b>\ud83d\udcc5 Upcoming Appointments</b>\n\n`;
-      events.slice(0, 5).forEach((e) => {
-        const start = new Date(e.startTime);
-        const end = new Date(e.endTime);
-        msg += `<b>${e.title}</b>\n`;
-        msg += `  ${start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} `;
-        msg += `${start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} — ${end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}\n`;
-        msg += `  Status: ${e.status}\n\n`;
+
+      const event = await storage.createCalendarEvent(business.id, parsed.data);
+
+      await storage.createActivityLog(business.id, {
+        type: "calendar",
+        title: "Event added",
+        description: `New event: ${event.title}`,
       });
-      await sendTelegramMessage(chatId, msg);
-      return;
-    }
 
-    if (text.startsWith("/reply")) {
-      const parts = text.split(" ");
-      const convoId = parseInt(parts[1]);
-      const replyText = parts.slice(2).join(" ");
-      if (isNaN(convoId) || !replyText) {
-        await sendTelegramMessage(chatId, "Usage: /reply [id] [your message]");
-        return;
+      return res.status(201).json(event);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to create event" });
+    }
+  });
+
+  // PATCH /api/calendar/events/:id
+  app.patch("/api/calendar/events/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+
+      const parsed = updateCalendarEventSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
       }
-      const convo = await storage.getConversation(convoId);
-      if (!convo) {
-        await sendTelegramMessage(chatId, "Conversation not found.");
-        return;
-      }
-      await storage.createMessage({
-        conversationId: convoId,
-        role: "owner",
-        content: replyText,
-        createdAt: new Date().toISOString(),
-      });
-      await storage.updateConversation(convoId, { status: "resolved", ownerAction: "approved" });
-      if (biz) {
-        await storage.createActivity({
-          businessId: biz.id,
-          type: "email_replied",
-          title: `Owner replied to ${convo.contactName} via Telegram`,
-          description: replyText.substring(0, 100),
-          createdAt: new Date().toISOString(),
+
+      const updated = await storage.updateCalendarEvent(req.params.id, business.id, parsed.data);
+      if (!updated) return res.status(404).json({ message: "Event not found" });
+      return res.json(updated);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to update event" });
+    }
+  });
+
+  // DELETE /api/calendar/events/:id
+  app.delete("/api/calendar/events/:id", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+      await storage.deleteCalendarEvent(req.params.id, business.id);
+      return res.json({ message: "Event deleted" });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to delete event" });
+    }
+  });
+
+  // ── Activity ──────────────────────────────────────────────
+
+  // GET /api/activity
+  app.get("/api/activity", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) return res.status(404).json({ message: "No business found" });
+      const activity = await storage.listActivityLog(business.id);
+      return res.json(activity);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch activity" });
+    }
+  });
+
+  // ── Stats ─────────────────────────────────────────────────
+
+  // GET /api/stats
+  app.get("/api/stats", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business) {
+        return res.json({
+          totalConversations: 0,
+          newConversations: 0,
+          autoReplied: 0,
+          escalated: 0,
+          upcomingAppointments: 0,
         });
       }
-      await sendTelegramMessage(chatId, `\u2705 Reply sent to conversation #${convoId} (${convo.contactName}).`);
-      return;
-    }
-
-    if (text.startsWith("/approve")) {
-      const convoId = parseInt(text.split(" ")[1]);
-      if (isNaN(convoId)) {
-        await sendTelegramMessage(chatId, "Usage: /approve [id]");
-        return;
-      }
-      await storage.updateConversation(convoId, { status: "auto_replied", ownerAction: "approved" });
-      await sendTelegramMessage(chatId, `\u2705 Conversation #${convoId} approved.`);
-      return;
-    }
-
-    if (text.startsWith("/reject")) {
-      const convoId = parseInt(text.split(" ")[1]);
-      if (isNaN(convoId)) {
-        await sendTelegramMessage(chatId, "Usage: /reject [id]");
-        return;
-      }
-      await storage.updateConversation(convoId, { status: "escalated", ownerAction: "rejected" });
-      await sendTelegramMessage(chatId, `\u274c Conversation #${convoId} rejected and escalated.`);
-      return;
-    }
-
-    // Default response for unrecognized messages
-    await sendTelegramMessage(
-      chatId,
-      `I received your message: "<i>${text.substring(0, 100)}</i>"\n\n`
-        + `I can help with:\n`
-        + `/briefing — Morning briefing\n`
-        + `/inbox — Check inbox\n`
-        + `/calendar — See schedule\n`
-        + `/stats — Dashboard stats\n`
-        + `/help — All commands`
-    );
-  });
-
-  // ── Telegram Settings ─────────────────────────────────
-  app.get("/api/telegram/status", async (_req, res) => {
-    try {
-      const info = await fetch(`${TELEGRAM_API}/getWebhookInfo`).then((r) => r.json());
-      const me = await fetch(`${TELEGRAM_API}/getMe`).then((r) => r.json());
-      res.json({
-        botConnected: me.ok,
-        botUsername: me.result?.username,
-        botName: me.result?.first_name,
-        webhookUrl: info.result?.url || null,
-        webhookActive: !!(info.result?.url),
-        pendingUpdates: info.result?.pending_update_count || 0,
-      });
-    } catch {
-      res.json({ botConnected: false, webhookUrl: null, webhookActive: false });
+      const stats = await storage.getStats(business.id);
+      return res.json(stats);
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to fetch stats" });
     }
   });
 
-  app.post("/api/telegram/set-webhook", async (req, res) => {
-    const { webhookUrl } = req.body;
-    if (!webhookUrl) {
-      return res.status(400).json({ message: "webhookUrl is required" });
-    }
+  // ── Waitlist ──────────────────────────────────────────────
+
+  // POST /api/waitlist
+  app.post("/api/waitlist", async (req: Request, res: Response) => {
     try {
-      const resp = await fetch(
-        `${TELEGRAM_API}/setWebhook?url=${encodeURIComponent(webhookUrl)}&drop_pending_updates=true`
+      const parsed = insertWaitlistSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
+      }
+      const entry = await storage.addToWaitlist(
+        parsed.data.email,
+        parsed.data.name,
+        parsed.data.businessType
       );
-      const data = await resp.json();
-      res.json(data);
-    } catch (err) {
-      res.status(500).json({ message: "Failed to set webhook", error: String(err) });
+      return res.status(201).json({ message: "Added to waitlist!", entry });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to join waitlist" });
     }
   });
 
-  app.post("/api/telegram/send-briefing", async (_req, res) => {
-    const biz = await storage.getBusiness();
-    if (!biz?.telegramChatId) {
-      return res.status(400).json({ message: "No Telegram chat ID configured. Send /start to the bot first." });
+  // ── Telegram Webhook ──────────────────────────────────────
+
+  // POST /api/telegram/webhook
+  app.post("/api/telegram/webhook", async (req: Request, res: Response) => {
+    try {
+      const update = req.body;
+
+      if (update.message) {
+        const chatId = update.message.chat?.id?.toString();
+        const text = update.message.text;
+
+        if (text === "/start") {
+          await sendTelegramMessage(
+            chatId,
+            `🤖 *IronClaw Bot* connected!\n\nYour chat ID is: \`${chatId}\`\n\nUse this ID in your IronClaw settings to link your business.`
+          );
+        }
+      }
+
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Telegram webhook error:", err);
+      return res.json({ ok: false });
     }
-    const stats = await storage.getStats();
-    const activity = await storage.listActivity(10);
-    const events = await storage.listCalendarEvents();
-    const briefing = formatBriefing(stats, activity, events);
-    const result = await sendTelegramMessage(biz.telegramChatId, briefing);
-    res.json({ sent: !!result?.ok });
   });
 
-  app.post("/api/telegram/notify", async (req, res) => {
-    const biz = await storage.getBusiness();
-    if (!biz?.telegramChatId) {
-      return res.status(400).json({ message: "No Telegram chat ID configured." });
-    }
-    const { message, buttons } = req.body;
-    let result;
-    if (buttons) {
-      result = await sendTelegramMessageWithButtons(biz.telegramChatId, message, buttons);
-    } else {
-      result = await sendTelegramMessage(biz.telegramChatId, message);
-    }
-    res.json({ sent: !!result?.ok });
-  });
+  // POST /api/telegram/notify — send a message to a business's telegram
+  app.post("/api/telegram/notify", requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const business = await storage.getBusinessByUserId(req.userId!);
+      if (!business?.telegramChatId) {
+        return res.status(400).json({ message: "No Telegram chat ID configured" });
+      }
 
-  // ── Email Processing (simulated) ──────────────────────
-  app.post("/api/email/process", async (req, res) => {
-    const biz = await storage.getBusiness();
-    if (!biz) {
-      return res.status(400).json({ message: "No business configured" });
-    }
-    const conversation = await storage.createConversation({
-      businessId: biz.id,
-      source: "email",
-      contactName: req.body.from_name || "Unknown",
-      contactEmail: req.body.from_email,
-      subject: req.body.subject,
-      status: "new",
-      category: "lead",
-      summary: req.body.body?.substring(0, 200),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    if (req.body.body) {
-      await storage.createMessage({
-        conversationId: conversation.id,
-        role: "customer",
-        content: req.body.body,
-        createdAt: new Date().toISOString(),
-      });
-    }
-    await storage.createActivity({
-      businessId: biz.id,
-      type: "email_received",
-      title: `New email from ${req.body.from_name || req.body.from_email}`,
-      description: `Subject: ${req.body.subject}`,
-      createdAt: new Date().toISOString(),
-    });
-    res.status(201).json(conversation);
-  });
+      const { message } = req.body;
+      if (!message) return res.status(400).json({ message: "Message is required" });
 
-  app.get("/api/email/inbox", async (_req, res) => {
-    const convos = await storage.listConversations();
-    const emails = convos.filter((c) => c.source === "email");
-    res.json(emails);
+      await sendTelegramMessage(business.telegramChatId, message);
+      return res.json({ message: "Notification sent" });
+    } catch (err: any) {
+      return res.status(500).json({ message: "Failed to send Telegram notification" });
+    }
   });
 
   return httpServer;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Telegram helper
+// ─────────────────────────────────────────────────────────────
+
+async function sendTelegramMessage(chatId: string, text: string): Promise<void> {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+  });
 }
